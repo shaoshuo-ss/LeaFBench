@@ -1,0 +1,42 @@
+models:
+  - model_family: Qwen-2.5
+    pretrained_models:
+      # - model_name: Qwen-2.5-7B
+      #   model_path: "models/Qwen-2.5-7B"
+      #   predeployed_models:
+      #     - model_name: Qwen-2.5-7B-Instruct
+      #       model_path: "models/Qwen-2.5-7B-Instruct"
+      #       type: "finetune"
+      #     - model_name: Qwen-2.5-7B-Medicine
+      #       model_path: "models/Qwen-2.5-7B-Medicine"
+      #       type: "finetune"
+      - model_name: Qwen-2.5-3B
+        model_path: "models/Qwen-2.5-3B"
+        predeployed_models:
+          - model_name: Qwen-2.5-3B-Instruct
+            model_path: "models/Qwen-2.5-3B-Instruct"
+            type: "finetune"
+  # - model_family: Llama-3.1
+  #   pretrained_models:
+  #     - model_name: Llama-3.1-8B
+  #       model_path: "models/Llama-3.1-8B"
+  #       predeployed_models:
+  #         - model_name: Llama-3-8B-Instruct
+  #           model_path: "models/Llama-3.1-8B-Instruct"
+  #           type: "finetune"
+deployed_techniques:
+  system_prompts:
+    - "You are a helpful assistant. Question: {{user_input}}; Answer:"
+    - "You are an expert programmer. Help users with coding tasks. Question: {{user_input}}; Answer:"
+    - "You are a medical AI assistant. Provide accurate medical information. Question: {{user_input}}; Answer:"
+    - "You are a creative writing assistant. Help users with storytelling and creative content. Question: {{user_input}}; Answer:"
+training_data:
+  models:
+    # - "Qwen-2.5-7B"
+    # - "Qwen-2.5-7B-Instruct"
+    - "Qwen-2.5-3B"
+    # - "Qwen-2.5-3B-Instruct"
+    # - "Llama-3.1-8B"
+    # - "Llama-3.1-8B-Instruct"
+  deployed_techniques:
+    - system_prompts: [0, 1]

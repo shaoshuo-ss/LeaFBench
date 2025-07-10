@@ -1,0 +1,1 @@
+accelerate launch --multi_gpu main.py --device 0,1
