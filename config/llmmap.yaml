@@ -22,9 +22,11 @@ inference_model:
     batch_size: 32
     learning_rate: 0.0001
     weight_decay: 0.01
+    num_repeats_per_model: 1
 embedding_model:
   embedding_model_path: 'models/e5-large-instruct/'
   max_length: 512
   batch_size: 8
 cached_fingerprints:
   path: 'cache/llmmap/'
+retrain_inference_model: True

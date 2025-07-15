@@ -48,12 +48,6 @@ class BaseModel(ModelInterface):
         super().__init__(config)
         self.model_pool = model_pool
         self.accelerator = accelerator
-
-    def is_model_loaded(self):
-        """
-        Check if the model is currently loaded.
-        """
-        return self.model is not None
     
     def _load_model(self):
         """
@@ -62,9 +56,10 @@ class BaseModel(ModelInterface):
         Uses accelerator for proper multi-GPU management if available.
         """
         # Use model pool to get the model (singleton pattern)
-        self.model = self.model_pool.get_model(self.base_model)
+        model = self.model_pool.get_model(self.base_model)
         # Get tokenizer from model pool as well
-        self.tokenizer = self.model_pool.get_tokenizer(self.model_name)
+        tokenizer = self.model_pool.get_tokenizer(self.model_name)
+        return model, tokenizer
     
     def generate(self, prompts, **kwargs):
         """
@@ -77,8 +72,7 @@ class BaseModel(ModelInterface):
         Returns:
             list: List of generated text strings
         """
-        if self.model is None:
-            self._load_model()
+        model, tokenizer = self._load_model()
         
         # Default generation parameters
         generation_params = {
@@ -87,34 +81,38 @@ class BaseModel(ModelInterface):
             'do_sample': kwargs.get('do_sample', True),
             'top_p': kwargs.get('top_p', 0.9),
             'top_k': kwargs.get('top_k', 50),
-            'pad_token_id': self.tokenizer.pad_token_id,
+            'pad_token_id': tokenizer.pad_token_id,
         }
 
         system_prompt = kwargs.get('system_prompt', None)
         if system_prompt is not None:
             # If a system prompt is provided, prepend it to each prompt
-            prompts = [system_prompt.replace("{{user_input}}", prompt) for prompt in prompts]
-        
+            if system_prompt.find("{{user_input}}") == -1:
+                prompts = [system_prompt + prompt for prompt in prompts]
+            else:
+                prompts = [system_prompt.replace("{{user_input}}", prompt) for prompt in prompts]
+
         # Tokenize input prompts
-        inputs = self.tokenizer(
+        inputs = tokenizer(
             prompts, 
             return_tensors='pt', 
             padding=True, 
             truncation=True,
-            max_length=kwargs.get('max_input_length', 256)
+            max_length=kwargs.get('max_input_length', 512),
+            padding_side='left'
         )
-        
+
         # Move inputs to the same device as model
         if self.accelerator is not None:
             # When using accelerator, it handles device placement
             device = self.accelerator.device
         else:
-            device = self.model.device
+            device = model.device
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
         # Generate text
         with torch.no_grad():
-            outputs = self.model.generate(
+            outputs = model.generate(
                 **inputs,
                 **generation_params
             )
@@ -125,7 +123,7 @@ class BaseModel(ModelInterface):
             # Remove input tokens from output
             input_length = inputs['input_ids'][i].shape[0]
             generated_tokens = output[input_length:]
-            generated_text = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+            generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
             generated_texts.append(generated_text)
         
         return generated_texts
@@ -141,11 +139,11 @@ class BaseModel(ModelInterface):
         Returns:
             torch.Tensor: Logits tensor of shape (batch_size, sequence_length, vocab_size)
         """
-        if self.model is None:
-            self._load_model()
+        # if self.model is None:
+        model, tokenizer = self._load_model()
         
         # Tokenize input prompts
-        inputs = self.tokenizer(
+        inputs = tokenizer(
             prompts, 
             return_tensors='pt', 
             padding=True, 
@@ -158,12 +156,12 @@ class BaseModel(ModelInterface):
             # When using accelerator, it handles device placement
             device = self.accelerator.device
         else:
-            device = self.model.device
+            device = model.device
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
         # Get logits from model
         with torch.no_grad():
-            outputs = self.model(**inputs)
+            outputs = model(**inputs)
             logits = outputs.logits
         
         # Apply temperature if specified

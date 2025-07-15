@@ -47,9 +47,9 @@ class InferenceModel:
 
         self.logger.info("\tLoading Inference Model...")
         self.model_path = self.config['inference_model']['inference_model_path']
-        if os.path.exists(self.model_path):
+        if os.path.exists(self.model_path) and not self.config.get("retrain_inference_model", False):
             self.logger.info(f"\tLoading model from {self.model_path}")
-            self.model = torch.load(self.model_path, map_location='auto')
+            self.model = torch.load(self.model_path)
             
             # Use accelerator to prepare model if available
             if self.accelerator is not None:
@@ -125,6 +125,10 @@ class InferenceModel:
             model_embeddings = torch.stack(model_embeddings)
             all_embeddings.append(model_embeddings)
             all_labels.extend([model_idx] * num_repeats_per_model)
+            
+            # Release GPU memory after processing this model
+            # model.unload_model(to_cpu=True)
+            # self.logger.info(f"Released GPU memory for model: {model_name}")
         
         # Concatenate all embeddings: (total_samples, num_queries, emb_size*2)
         all_embeddings = torch.cat(all_embeddings, dim=0)
