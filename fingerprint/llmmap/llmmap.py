@@ -1,5 +1,7 @@
 from fingerprint.fingerprint_interface import LLMFingerprintInterface
 from fingerprint.llmmap.inference import InferenceModel
+import torch
+import torch.nn.functional as F
 
 class LLMmap(LLMFingerprintInterface):
     """
@@ -35,3 +37,30 @@ class LLMmap(LLMFingerprintInterface):
         
         # Generate the fingerprint using the inference model
         return self.inference_model.get_fingerprint(model)
+    
+    def compare_fingerprints(self, fingerprint1, fingerprint2):
+        """
+        Compare two fingerprints using cosine similarity.
+
+        Args:
+            fingerprint1: The first fingerprint tensor.
+            fingerprint2: The second fingerprint tensor.
+        
+        Returns:
+            float: Cosine similarity score between the two fingerprints (scaling to [0,1]).
+        """
+        # Ensure both fingerprints are tensors
+        if not isinstance(fingerprint1, torch.Tensor):
+            fingerprint1 = torch.tensor(fingerprint1)
+        if not isinstance(fingerprint2, torch.Tensor):
+            fingerprint2 = torch.tensor(fingerprint2)
+        
+        # Flatten the tensors if they are multi-dimensional
+        fingerprint1 = fingerprint1.flatten().to(self.accelerator.device)
+        fingerprint2 = fingerprint2.flatten().to(self.accelerator.device)
+        
+        # Compute cosine similarity
+        cosine_sim = (F.cosine_similarity(fingerprint1.unsqueeze(0), fingerprint2.unsqueeze(0)) + 1) / 2
+        
+        # Return the similarity score as a float
+        return cosine_sim.item()

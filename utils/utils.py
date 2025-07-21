@@ -64,11 +64,6 @@ def setup_environment(args):
         accelerator = Accelerator()
         device = accelerator.device
     
-    print(f"Accelerator device: {device}")
-    print(f"Random seed: {args.seed}")
-    print(f"Process index: {accelerator.process_index}")
-    print(f"Number of processes: {accelerator.num_processes}")
-    
     return accelerator, device
 
 

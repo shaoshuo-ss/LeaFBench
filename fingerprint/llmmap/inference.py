@@ -49,7 +49,7 @@ class InferenceModel:
         self.model_path = self.config['inference_model']['inference_model_path']
         if os.path.exists(self.model_path) and not self.config.get("retrain_inference_model", False):
             self.logger.info(f"\tLoading model from {self.model_path}")
-            self.model = torch.load(self.model_path)
+            self.model = torch.load(self.model_path, weights_only=False)
             
             # Use accelerator to prepare model if available
             if self.accelerator is not None:
@@ -70,6 +70,29 @@ class InferenceModel:
                 output = self.model(traces_tensor)
         
         return output[0]
+    
+    def get_fingerprint(self, model):
+        """
+        Generate a fingerprint for the given model.
+
+        Args:
+            model: The model to extract the fingerprint.
+        
+        Returns:
+            torch.Tensor: The fingerprint tensor.
+        """
+        if not hasattr(self, 'model'):
+            raise RuntimeError("Inference model is not prepared. Call prepare() first.")
+        
+        # Generate the fingerprint using the inference model
+        with torch.no_grad():
+            answers = model.generate(self.queries)
+        # Get embeddings for these answers
+            embeddings = self.get_embeddings(answers)  # Shape: (1, num_queries, emb_size*2)
+            fingerprint = self.model(embeddings)
+        # model.fingerprint = fingerprint.squeeze(0)  # Remove batch dimension
+
+        return fingerprint.squeeze(0)
     
     def get_embeddings(self, answers):
         if len(answers) != len(self.queries):
@@ -191,13 +214,21 @@ class InferenceModel:
                 num_batches += 1
             
             avg_loss = total_loss / num_batches
-            if (epoch + 1) % 10 == 0:
-                self.logger.info(f"Epoch {epoch + 1}/{epochs}, Average Loss: {avg_loss:.4f}")
+            # if (epoch + 1) % 10 == 0:
+            self.logger.info(f"Epoch {epoch + 1}/{epochs}, Average Loss: {avg_loss:.4f}")
         
         # Save the trained model
         model_save_path = self.config['inference_model']['inference_model_path']
         os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
-        torch.save(self.model, model_save_path)
+        
+        # Extract the actual model from accelerator wrapper if needed
+        if self.accelerator is not None and hasattr(self.model, 'module'):
+            # If wrapped by DistributedDataParallel, save the underlying model
+            model_to_save = self.model.module
+        else:
+            model_to_save = self.model
+            
+        torch.save(model_to_save, model_save_path)
         self.logger.info(f"Model saved to {model_save_path}")
         
         # Set model to evaluation mode

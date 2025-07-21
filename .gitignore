@@ -2,4 +2,6 @@
 /models
 /logs
 /cache
+/results
+/.vscode
 *.log
