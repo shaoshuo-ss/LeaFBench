@@ -12,6 +12,7 @@ if __name__ == "__main__":
     # Load configurations
     benchmark_config = load_config(args.benchmark_config)
     fingerprint_config = load_config(args.fingerprint_config)
+    args.seed = fingerprint_config.get("seed", 42)
 
     args.fingerprint_method = fingerprint_config.get("fingerprint_method", None)
     if args.fingerprint_method is None:

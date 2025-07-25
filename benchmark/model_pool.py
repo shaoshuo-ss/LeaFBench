@@ -91,6 +91,7 @@ class ModelPool:
                     if self.fingerprint_type == "white-box":
                         model = dequantize_model(model).model
                         # print(model.state_dict().keys())
+                    model = model.to(self.accelerator.device)
                 else:
                     model = AutoModelForCausalLM.from_pretrained(
                         self.model_paths[model_name], 

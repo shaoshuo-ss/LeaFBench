@@ -1,11 +1,11 @@
-from fingerprint.fingerprint_interface import FingerprintInterface
-from .generate_activation import load_statements, get_acts
-from .compute_cka import CKA
+from fingerprint.fingerprint_interface import LLMFingerprintInterface
+from fingerprint.reef.generate_activation import load_statements, get_acts
+from fingerprint.reef.compute_cka import CKA
 
 
-class REEF(FingerprintInterface):
-    def __init__(self):
-        super().__init__()
+class REEF(LLMFingerprintInterface):
+    def __init__(self, config=None, accelerator=None):
+        super().__init__(config=config, accelerator=accelerator)
 
     def prepare(self, train_models=None):
         """
@@ -18,6 +18,7 @@ class REEF(FingerprintInterface):
         num_samples = self.config.get('num_samples', 200)
         self.layers = self.config.get('layers', 18)
         self.statements = load_statements(dataset_path)[:num_samples]
+        self.batch_size = self.config.get('batch_size', 1)
     
     def get_fingerprint(self, model):
         """
@@ -34,12 +35,13 @@ class REEF(FingerprintInterface):
             self.statements, tokenizer, torch_model, 
             model.model_family, 
             self.layers, 
-            self.accelerator.device
+            self.accelerator.device,
+            batch_size=self.batch_size
         )
         return fingerprint
         
     
-    def compare(self, base_model, testing_model):
+    def compare_fingerprints(self, base_model, testing_model):
         """
         Compare two models using their fingerprints.
 

@@ -14,11 +14,11 @@ class Hook:
     def __call__(self, module, module_inputs, module_outputs):
         self.out = module_outputs 
 
-def load_statements(dataset_name):
+def load_statements(dataset_path):
     """
     Load statements from csv file, return list of strings.
     """
-    dataset = pd.read_csv(f"datasets/{dataset_name}.csv")
+    dataset = pd.read_csv(dataset_path)
     statements = dataset['statement'].tolist()
     return statements
 
@@ -99,7 +99,7 @@ def get_layer_module(model, model_name, layer_idx):
         except AttributeError:
             raise ValueError(f"Unsupported model architecture for {model_name}")
 
-def get_acts(statements, tokenizer, model, model_name, layers, device, token_pos=-1):
+def get_acts(statements, tokenizer, model, model_name, layers, device, token_pos=-1, batch_size=1):
     """
     Get given layer activations for the statements. 
     Return dictionary of stacked activations.
@@ -112,6 +112,7 @@ def get_acts(statements, tokenizer, model, model_name, layers, device, token_pos
         layers: Layer specification (int, list, str like "0-5", "last-3", "all")
         device: Device to run on
         token_pos: Position of token to extract activations from (default: -1 for last token)
+        batch_size: Number of statements to process in each batch (default: 1)
     
     Returns:
         Dictionary mapping layer indices to stacked activation tensors
@@ -134,11 +135,24 @@ def get_acts(statements, tokenizer, model, model_name, layers, device, token_pos
     
     # get activations
     acts = {layer_idx: [] for layer_idx in layer_indices}
-    for statement in tqdm(statements, desc="Extracting activations"):
-        input_ids = tokenizer.encode(statement, return_tensors="pt").to(device=model.device)
-        model(input_ids)
+    
+    # Process statements in batches
+    for i in tqdm(range(0, len(statements), batch_size), desc="Extracting activations"):
+        batch_statements = statements[i:i + batch_size]
+        
+        # Tokenize the entire batch
+        batch_inputs = tokenizer(batch_statements, return_tensors="pt", padding=True, truncation=True)
+        batch_inputs = {k: v.to(device=model.device) for k, v in batch_inputs.items()}
+        
+        # Forward pass for the entire batch
+        with torch.no_grad():
+            model(**batch_inputs)
+        
+        # Extract activations from each hook for the batch
         for layer_idx, hook in zip(layer_indices, hooks):
-            acts[layer_idx].append(hook.out[0][0, token_pos])
+            # hook.out shape: [batch_size, seq_len, hidden_size]
+            batch_acts = hook.out[0][:, token_pos]  # [batch_size, hidden_size]
+            acts[layer_idx].extend(batch_acts)
     
     # stack len(statements)'s activations
     for layer_idx, act in acts.items():

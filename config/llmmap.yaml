@@ -4,6 +4,7 @@ use_cache: True
 cached_fingerprints_path: 'cache/llmmap/llmmap_fingerprints.pth'
 re_fingerprinting: False
 fingerprint_type: 'black-box'
+seed: 42
 
 # configuration for llmmap
 queries:

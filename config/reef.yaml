@@ -1,8 +1,13 @@
 # global configuration for all the fingerprinting methods
-fingerprint_method: 'huref'
+fingerprint_method: 'reef'
 use_cache: True
-cached_fingerprints_path: 'cache/huref/huref_fingerprints.pth'
+cached_fingerprints_path: 'cache/reef/reef_fingerprints.pth'
 re_fingerprinting: False
 fingerprint_type: 'white-box'
+seed: 42
 
-# configuration for huref
+# configuration for reef
+dataset_path: 'data/reef/truthfulqa.csv'
+num_samples: 200
+layers: 18
+batch_size: 8

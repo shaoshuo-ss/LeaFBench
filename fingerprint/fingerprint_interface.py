@@ -32,7 +32,7 @@ class LLMFingerprintInterface:
         """
         raise NotImplementedError("This method should be implemented by subclasses.")
     
-    def compare(self, base_model, testing_model):
+    def compare_fingerprints(self, base_model, testing_model):
         """
         Compare two models using their fingerprints.
 

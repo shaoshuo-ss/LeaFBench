@@ -4,6 +4,7 @@ use_cache: True
 cached_fingerprints_path: 'cache/huref/huref_fingerprints.pth'
 re_fingerprinting: False
 fingerprint_type: 'white-box'
+seed: 42
 
 # configuration for huref
 feature_extraction_method: 'MeanPooling'  # 'MeanPooling' or 'CNN'
