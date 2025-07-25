@@ -1,0 +1,8 @@
+# global configuration for all the fingerprinting methods
+fingerprint_method: 'huref'
+use_cache: True
+cached_fingerprints_path: 'cache/huref/huref_fingerprints.pth'
+re_fingerprinting: False
+fingerprint_type: 'white-box'
+
+# configuration for huref

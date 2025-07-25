@@ -1,0 +1,14 @@
+# global configuration for all the fingerprinting methods
+fingerprint_method: 'huref'
+use_cache: True
+cached_fingerprints_path: 'cache/huref/huref_fingerprints.pth'
+re_fingerprinting: False
+fingerprint_type: 'white-box'
+
+# configuration for huref
+feature_extraction_method: 'MeanPooling'  # 'MeanPooling' or 'CNN'
+encoder_path: 'models/huref/encoder.pth'
+sorted_tokens_path: 'cache/huref/sorted_tokens/'
+num_tokens: 4096
+datanum: 400000
+num_processes: 64

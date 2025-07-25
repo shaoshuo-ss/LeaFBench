@@ -20,14 +20,14 @@ class ModelInterface:
         self.model_pool = model_pool
         self.accelerator = accelerator
 
-    def _load_model(self):
+    def load_model(self):
         """
         Load the model weights and prepare it for inference.
         Uses the model pool if available, otherwise loads directly.
         Uses accelerator for proper multi-GPU management if available.
         """
         # Use model pool to get the model (singleton pattern)
-        model = self.model_pool.get_model(self.base_model)
+        model = self.model_pool.get_model(self.base_model, type=self.type)
         # Get tokenizer from model pool as well
         tokenizer = self.model_pool.get_tokenizer(self.base_model)
         return model, tokenizer

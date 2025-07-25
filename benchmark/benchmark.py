@@ -14,12 +14,13 @@ class Benchmark:
     This class initializes the model pool, loads models, and provides methods to access and run models.
     It also handles the configuration for the benchmark, including model families, pretrained models, and deploying techniques.
     """
-    def __init__(self, config, accelerator=None):
+    def __init__(self, config, accelerator=None, fingerprint_type='black-box'):
         self.config = config
         self.accelerator = accelerator
         # Initialize the model pool with accelerator.
         # A model pool containing all base models. Any deployed model should use one of the base models in the model pool.
-        self.modelpool = ModelPool(accelerator=accelerator, max_loaded_models=config.get("max_loaded_models", 1), offload_path=config.get("offload_path", None))
+        self.modelpool = ModelPool(accelerator=accelerator, max_loaded_models=config.get("max_loaded_models", 1), 
+                                   offload_path=config.get("offload_path", None), fingerprint_type=fingerprint_type)
         self.models = OrderedDict()
         default_generation_params = config.get("default_generation_params", {
             "max_new_tokens": 512,
@@ -44,38 +45,40 @@ class Benchmark:
                 instruct_model, model_family_name, pretrained_model_name, default_generation_params)
 
             # apply deploying techniques to instruct model and construct new model instances
-            deploying_techniques = self.config.get("deploying_techniques", {})
-            if deploying_techniques:
-                if deploying_techniques.get("system_prompts", None) is not None:
-                    # If system prompts are specified, apply them to the instruct model
-                    system_prompts = deploying_techniques["system_prompts"]
-                    self._load_system_prompt_model(
-                        system_prompts, model_family_name, pretrained_model_name, 
-                        instruct_model_name, instruct_model_path, default_generation_params)
-                if deploying_techniques.get("rag", None) is not None:
-                    # If RAG is specified, create a RAG model instance
-                    rag_configs = deploying_techniques["rag"]
-                    self._load_rag_model(
-                        rag_configs, model_family_name, pretrained_model_name, 
-                        instruct_model_name, default_generation_params)
-                if deploying_techniques.get("watermark", None) is not None:
-                    # If watermarking is specified, create a Watermark model instance
-                    watermark_configs = deploying_techniques["watermark"]
-                    self._load_watermark_model(
-                        watermark_configs, model_family_name, pretrained_model_name, 
-                        instruct_model_name, default_generation_params)
-                if deploying_techniques.get("cot", None) is not None:
-                    # If COT is specified, create a COT model instance
-                    cot_configs = deploying_techniques["cot"]
-                    self._load_cot_model(
-                        cot_configs, model_family_name, pretrained_model_name, 
-                        instruct_model_name, instruct_model_path, default_generation_params)
-                if deploying_techniques.get("sampling_settings", None) is not None:
-                    # If sampling settings are specified, create models with different sampling configurations
-                    sampling_configs = deploying_techniques["sampling_settings"]
-                    self._load_sampling_model(
-                        sampling_configs, model_family_name, pretrained_model_name, 
-                        instruct_model_name, instruct_model_path)
+            # white-box fingerprinting methods do not require testing deploying techniques, so we skip this step
+            if fingerprint_type == 'black-box':
+                deploying_techniques = self.config.get("deploying_techniques", {})
+                if deploying_techniques:
+                    if deploying_techniques.get("system_prompts", None) is not None:
+                        # If system prompts are specified, apply them to the instruct model
+                        system_prompts = deploying_techniques["system_prompts"]
+                        self._load_system_prompt_model(
+                            system_prompts, model_family_name, pretrained_model_name, 
+                            instruct_model_name, instruct_model_path, default_generation_params)
+                    if deploying_techniques.get("rag", None) is not None:
+                        # If RAG is specified, create a RAG model instance
+                        rag_configs = deploying_techniques["rag"]
+                        self._load_rag_model(
+                            rag_configs, model_family_name, pretrained_model_name, 
+                            instruct_model_name, default_generation_params)
+                    if deploying_techniques.get("watermark", None) is not None:
+                        # If watermarking is specified, create a Watermark model instance
+                        watermark_configs = deploying_techniques["watermark"]
+                        self._load_watermark_model(
+                            watermark_configs, model_family_name, pretrained_model_name, 
+                            instruct_model_name, default_generation_params)
+                    if deploying_techniques.get("cot", None) is not None:
+                        # If COT is specified, create a COT model instance
+                        cot_configs = deploying_techniques["cot"]
+                        self._load_cot_model(
+                            cot_configs, model_family_name, pretrained_model_name, 
+                            instruct_model_name, instruct_model_path, default_generation_params)
+                    if deploying_techniques.get("sampling_settings", None) is not None:
+                        # If sampling settings are specified, create models with different sampling configurations
+                        sampling_configs = deploying_techniques["sampling_settings"]
+                        self._load_sampling_model(
+                            sampling_configs, model_family_name, pretrained_model_name, 
+                            instruct_model_name, instruct_model_path)
 
             # load the predeployed models
             predeployed_models = model_family.get("predeployed_models", [])

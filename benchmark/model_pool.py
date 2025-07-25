@@ -4,10 +4,12 @@ import os
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import AutoPeftModelForCausalLM
+from gptqmodel.nn_modules.qlinear.torch import dequantize_model
+from gptqmodel import BACKEND, GPTQModel
 from accelerate import disk_offload
 
 class ModelPool:
-    def __init__(self, accelerator=None, max_loaded_models=1, offload_path=None):
+    def __init__(self, accelerator=None, max_loaded_models=1, offload_path=None, fingerprint_type="black-box"):
         # self.models = {}  # {model_name: model_instance}
         self.tokenizers = OrderedDict()  # {model_name: tokenizer_instance}
         self.model_paths = OrderedDict()  # {model_name: model_path}
@@ -17,6 +19,8 @@ class ModelPool:
         self.offload_path = offload_path
         if self.offload_path:
             os.makedirs(self.offload_path, exist_ok=True)
+        self.fingerprint_type = fingerprint_type
+        self.backend = BACKEND("torch")  # Set backend for gptqmodel
 
     def register_model(self, model_name, model_path):
         """
@@ -74,6 +78,19 @@ class ModelPool:
                         device_map="balanced", 
                         torch_dtype=torch.float16
                     )
+                    model = model.merge_and_unload()
+                elif type == "quantization":
+                    model = GPTQModel.load(
+                        self.model_paths[model_name], 
+                        device_map="auto", 
+                        torch_dtype=torch.float16, 
+                        backend=self.backend
+                    )
+                    
+                    # Only dequantize if needed for white-box fingerprinting
+                    if self.fingerprint_type == "white-box":
+                        model = dequantize_model(model).model
+                        # print(model.state_dict().keys())
                 else:
                     model = AutoModelForCausalLM.from_pretrained(
                         self.model_paths[model_name], 

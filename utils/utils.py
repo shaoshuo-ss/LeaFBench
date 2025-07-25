@@ -22,11 +22,11 @@ def load_args():
     parser = argparse.ArgumentParser()
     
     parser.add_argument('--seed', type=int, default=42, help='random seed')
-    parser.add_argument('--device', type=str, default='cpu', help='Device to run the model on (e.g., "cpu", "0,1,2")')
+    # parser.add_argument('--device', type=str, default='cpu', help='Device to run the model on (e.g., "cpu", "0,1,2")')
     parser.add_argument('--benchmark_config', type=str, default='config/benchmark_config.yaml', help='Path to the benchmark configuration file')
     parser.add_argument('--fingerprint_config', type=str, default='config/llmmap.yaml', help='Path to the fingerprint configuration file')
     parser.add_argument('--log_path', type=str, default='logs/', help='Path to save logs and results')
-    parser.add_argument('--fingerprint_method', type=str, default='llmmap', help='Fingerprinting method to use (e.g., "llmmap")')
+    # parser.add_argument('--fingerprint_method', type=str, default='llmmap', help='Fingerprinting method to use (e.g., "llmmap")')
 
     args = parser.parse_args()
     return args
@@ -41,28 +41,30 @@ def setup_environment(args):
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
+
+    # logger = logging.getLogger(__name__)
     
     # Setup device configuration for accelerator
-    if args.device == 'cpu':
-        # Force CPU usage by setting CUDA_VISIBLE_DEVICES to empty
-        os.environ['CUDA_VISIBLE_DEVICES'] = ''
-        accelerator = Accelerator()
-        device = accelerator.device
-    else:
-        # Handle GPU device specification (e.g., "0,1,2")
-        if ',' in args.device:
-            # Multiple GPUs specified
-            gpu_ids = args.device
-            os.environ['CUDA_VISIBLE_DEVICES'] = gpu_ids
-            print(f"Using multiple GPUs: {gpu_ids}")
-        else:
-            # Single GPU specified
-            os.environ['CUDA_VISIBLE_DEVICES'] = args.device
-            print(f"Using GPU: {args.device}")
-        
+    # if args.device == 'cpu':
+    #     # Force CPU usage by setting CUDA_VISIBLE_DEVICES to empty
+    #     os.environ['CUDA_VISIBLE_DEVICES'] = ''
+    #     accelerator = Accelerator()
+    #     device = accelerator.device
+    # else:
+    #     # Handle GPU device specification (e.g., "0,1,2")
+    #     if ',' in args.device:
+    #         # Multiple GPUs specified
+    #         gpu_ids = args.device
+    #         os.environ['CUDA_VISIBLE_DEVICES'] = gpu_ids
+    #         logger.info(f"Using multiple GPUs: {gpu_ids}")
+    #     else:
+    #         # Single GPU specified
+    #         os.environ['CUDA_VISIBLE_DEVICES'] = args.device
+    #         logger.info(f"Using GPU: {args.device}")
+
         # Initialize accelerator after setting CUDA_VISIBLE_DEVICES
-        accelerator = Accelerator()
-        device = accelerator.device
+    accelerator = Accelerator()
+    device = accelerator.device
     
     return accelerator, device
 
@@ -75,6 +77,12 @@ def init_log(args):
     )
     os.makedirs(args.save_path, exist_ok=True)
     print(f"Log path initialized: {args.save_path}")
+    
+    # Clear existing handlers to avoid conflicts
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
     # set log
     log_path = os.path.join(args.save_path, 'log.log')
     logging.basicConfig(
@@ -83,7 +91,9 @@ def init_log(args):
         level=logging.INFO,
         handlers=[
             logging.FileHandler(log_path),
-        ]
+            logging.StreamHandler()  # 添加控制台输出
+        ],
+        force=True  # 强制重新配置
     )
     logger = logging.getLogger()
     return logger

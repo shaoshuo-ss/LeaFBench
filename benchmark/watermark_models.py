@@ -26,7 +26,7 @@ class WatermarkModel(ModelInterface):
         Returns:
             list: List of generated text strings
         """
-        model, tokenizer = self._load_model()
+        model, tokenizer = self.load_model()
 
         watermark_processor = WatermarkLogitsProcessor(
             vocab=tokenizer.get_vocab().values(),
@@ -102,7 +102,7 @@ class WatermarkModel(ModelInterface):
             torch.Tensor: Logits tensor of shape (batch_size, sequence_length, vocab_size)
         """
         # if self.model is None:
-        model, tokenizer = self._load_model()
+        model, tokenizer = self.load_model()
         
         # Tokenize input prompts
         inputs = tokenizer(

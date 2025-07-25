@@ -1,3 +1,4 @@
+from benchmark import base_models
 from utils.utils import load_args, setup_environment, init_log, load_config
 import pandas as pd
 import os
@@ -7,22 +8,28 @@ from fingerprint.fingerprint_factory import create_fingerprint_method
 
 if __name__ == "__main__":
     args = load_args()
-    # Setup environment
-    accelerator, device = setup_environment(args)
-    
-    # Initialize logging
-    logger = init_log(args)
     
     # Load configurations
     benchmark_config = load_config(args.benchmark_config)
     fingerprint_config = load_config(args.fingerprint_config)
+
+    args.fingerprint_method = fingerprint_config.get("fingerprint_method", None)
+    if args.fingerprint_method is None:
+        raise ValueError("Fingerprint method must be specified in the fingerprint configuration file.")
+
+    # Initialize logging
+    logger = init_log(args)
     
     logger.info("Configuration loaded successfully!")
     logger.info(f"Benchmark config: {benchmark_config}")
     logger.info(f"Fingerprint config: {fingerprint_config}")
+
+    # Setup accelerator environment
+    accelerator, device = setup_environment(args)
     
     # initialize the benchmark with accelerator
-    benchmark = Benchmark(benchmark_config, accelerator=accelerator)
+    benchmark = Benchmark(benchmark_config, accelerator=accelerator, 
+                          fingerprint_type=fingerprint_config.get("fingerprint_type", "black-box"))
 
     # initialize the fingerprint method with accelerator
     fingerprint_method = create_fingerprint_method(fingerprint_config, accelerator=accelerator)
@@ -75,21 +82,21 @@ if __name__ == "__main__":
         results_comparing_instruct_models = {}
         for model_name, model in all_models.items():
             # get the testing model's fingerprint
-            fingerprint = model.get_fingerprint()
-            if fingerprint is None:
-                logger.warning(f"No fingerprint found for model {model_name}, skipping comparison.")
-                continue
+            # fingerprint = model.get_fingerprint()
+            # if fingerprint is None:
+            #     logger.warning(f"No fingerprint found for model {model_name}, skipping comparison.")
+            #     continue
 
             # get the pretrained model for comparison
             pretrained_model = benchmark.get_model(model.pretrained_model)
             if pretrained_model is None:
                 logger.warning(f"No pretrained model found for {model_name}, skipping comparison.")
                 continue
-            pretrained_fingerprint = pretrained_model.get_fingerprint()
-            if pretrained_fingerprint is None:
-                logger.warning(f"No fingerprint found for pretrained model of {model_name}, skipping comparison.")
-                continue
-            similarity = fingerprint_method.compare_fingerprints(fingerprint, pretrained_fingerprint)
+            # pretrained_fingerprint = pretrained_model.get_fingerprint()
+            # if pretrained_fingerprint is None:
+            #     logger.warning(f"No fingerprint found for pretrained model of {model_name}, skipping comparison.")
+            #     continue
+            similarity = fingerprint_method.compare_fingerprints(base_model=pretrained_model, testing_model=model)
             logger.info(f"Similarity between {model_name} and its pretrained model: {similarity:.4f}")
             results_comparing_pretrained_models[model_name] = similarity
             
@@ -98,11 +105,11 @@ if __name__ == "__main__":
             if instruct_model is None:
                 logger.warning(f"No instruct model found for {model_name}, skipping comparison.")
                 continue
-            instruct_fingerprint = instruct_model.get_fingerprint()
-            if instruct_fingerprint is None:
-                logger.warning(f"No fingerprint found for instruct model of {model_name}, skipping comparison.")
-                continue
-            instruct_similarity = fingerprint_method.compare_fingerprints(fingerprint, instruct_fingerprint)
+            # instruct_fingerprint = instruct_model.get_fingerprint()
+            # if instruct_fingerprint is None:
+            #     logger.warning(f"No fingerprint found for instruct model of {model_name}, skipping comparison.")
+            #     continue
+            instruct_similarity = fingerprint_method.compare_fingerprints(base_model=instruct_model, testing_model=model)
             logger.info(f"Similarity between {model_name} and its instruct model: {instruct_similarity:.4f}")
             results_comparing_instruct_models[model_name] = instruct_similarity
     

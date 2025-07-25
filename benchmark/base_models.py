@@ -20,7 +20,7 @@ class BaseModel(ModelInterface):
         Returns:
             list: List of generated text strings
         """
-        model, tokenizer = self._load_model()
+        model, tokenizer = self.load_model()
         
         # Default generation parameters
         generation_params = {
@@ -59,11 +59,11 @@ class BaseModel(ModelInterface):
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
         # Generate text
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                **generation_params
-            )
+        # with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            **generation_params
+        )
         
         # Decode generated text
         generated_texts = []
@@ -88,7 +88,7 @@ class BaseModel(ModelInterface):
             torch.Tensor: Logits tensor of shape (batch_size, sequence_length, vocab_size)
         """
         # if self.model is None:
-        model, tokenizer = self._load_model()
+        model, tokenizer = self.load_model()
         
         # Tokenize input prompts
         inputs = tokenizer(

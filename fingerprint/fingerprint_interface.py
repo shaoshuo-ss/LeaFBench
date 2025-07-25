@@ -19,19 +19,6 @@ class LLMFingerprintInterface:
             train_models (optional): Models to train, if necessary.
         """
         pass
-
-    def evaluate(self, train_models, test_models):
-        """
-        Evaluate the fingerprinting method on a given training and testing model.
-
-        Args:
-            train_models: The models used for training.
-            test_models: The models used for testing.
-
-        Returns:
-            tuple(float, float): The evaluation scores of training and testing models.
-        """
-        raise NotImplementedError("This method should be implemented by subclasses.")
     
     def get_fingerprint(self, model):
         """
@@ -45,13 +32,13 @@ class LLMFingerprintInterface:
         """
         raise NotImplementedError("This method should be implemented by subclasses.")
     
-    def compare(self, fingerprint1, fingerprint2):
+    def compare(self, base_model, testing_model):
         """
-        Compare two fingerprints.
+        Compare two models using their fingerprints.
 
         Args:
-            fingerprint1 (torch.Tensor): The first fingerprint tensor.
-            fingerprint2 (torch.Tensor): The second fingerprint tensor.
+            base_model (ModelInterface): The base model to compare against.
+            testing_model (ModelInterface): The model to compare.
 
         Returns:
             float: Similarity score between the two fingerprints.

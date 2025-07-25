@@ -49,8 +49,8 @@ MODELS_TO_DOWNLOAD=(
   "Xiaojian9992024/Llama3.1-8B-ExtraMix"
   "LlamaFactoryAI/Llama-3.1-8B-Instruct-cv-job-description-matching"
   "chchen/Llama-3.1-8B-Instruct-PsyCourse-fold7"
-  "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic"
-  "mlx-community/Llama-3.1-8B-Instruct-4bit"
+  "iqbalamo93/Meta-Llama-3.1-8B-Instruct-GPTQ-Q_8"
+  "DaraV/LLaMA-3.1-8B-Instruct-INT4-GPTQ"
   "mistralai/Mistral-7B-v0.3"
   "mistralai/Mistral-7B-Instruct-v0.3"
   "KurmaAI/AQUA-7B"
@@ -77,6 +77,12 @@ MODELS_TO_DOWNLOAD=(
   "v000000/Qwen2.5-14B-Gutenberg-Instruct-Slerpeno"
   "ToastyPigeon/qwen-story-test-qlora"
   "Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4"
+  "sentence-transformers/all-mpnet-base-v2" # RAG
+  "intfloat/multilingual-e5-large-instruct" # LLMmap
+)
+
+DATASETS_TO_DOWNLOAD=(
+    "rajpurkar/squad_v2" # RAG
 )
 
 # Specify the local directory to download models to.
@@ -105,6 +111,12 @@ fi
 echo "Hugging Face model download script started."
 echo "========================================="
 
+# Initialize counters
+MODEL_SUCCESS_COUNT=0
+MODEL_FAILURE_COUNT=0
+DATASET_SUCCESS_COUNT=0
+DATASET_FAILURE_COUNT=0
+
 # If a target directory is specified, create it
 # if [ -n "$TARGET_DIR" ]; then
 #     echo "Target download directory: $TARGET_DIR"
@@ -126,7 +138,7 @@ do
     echo "-----------------------------------------"
 
     # Construct the download command
-    CMD="huggingface-cli download --resume-download $model_id"
+    CMD="huggingface-cli download $model_id"
 
     # Add token argument
     if [ -n "$TOKEN_ARG" ]; then
@@ -148,11 +160,72 @@ do
     # Check the exit code of the last command
     if [ $? -eq 0 ]; then
         echo "✅ Successfully downloaded model: $model_id"
+        ((MODEL_SUCCESS_COUNT++))
     else
         echo "❌ Failed to download model: $model_id" >&2
+        ((MODEL_FAILURE_COUNT++))
+    fi
+done
+
+# Loop through the dataset list and download
+for dataset_id in "${DATASETS_TO_DOWNLOAD[@]}"
+do
+    echo -e "\n-----------------------------------------"
+    echo "Preparing to download dataset: $dataset_id"
+    echo "-----------------------------------------"
+
+    # Construct the download command
+    CMD="huggingface-cli download --repo-type dataset $dataset_id"
+
+    # Add token argument
+    if [ -n "$TOKEN_ARG" ]; then
+        CMD="$CMD $TOKEN_ARG"
+    fi
+
+    # Add local directory argument
+    # Using --local-dir-use-symlinks auto can save disk space by using symlinks where possible.
+    # if [ -n "$TARGET_DIR" ]; then
+    #     CMD="$CMD --local-dir \"$TARGET_DIR/$dataset_id\" --local-dir-use-symlinks auto"
+    # fi
+    
+    # Print the command to be executed (for debugging)
+    echo "Executing command: $CMD"
+    
+    # Execute the download
+    eval $CMD
+
+    # Check the exit code of the last command
+    if [ $? -eq 0 ]; then
+        echo "✅ Successfully downloaded dataset: $dataset_id"
+        ((DATASET_SUCCESS_COUNT++))
+    else
+        echo "❌ Failed to download dataset: $dataset_id" >&2
+        ((DATASET_FAILURE_COUNT++))
     fi
 done
 
 echo -e "\n========================================="
-echo "🎉 All specified model tasks have been processed."
+echo "🎉 Download Summary"
+echo "========================================="
+echo "Models:"
+echo "  ✅ Successfully downloaded: $MODEL_SUCCESS_COUNT"
+echo "  ❌ Failed downloads: $MODEL_FAILURE_COUNT"
+echo "  📊 Total models processed: $((MODEL_SUCCESS_COUNT + MODEL_FAILURE_COUNT))"
+echo ""
+echo "Datasets:"
+echo "  ✅ Successfully downloaded: $DATASET_SUCCESS_COUNT"
+echo "  ❌ Failed downloads: $DATASET_FAILURE_COUNT"
+echo "  📊 Total datasets processed: $((DATASET_SUCCESS_COUNT + DATASET_FAILURE_COUNT))"
+echo ""
+echo "Overall:"
+echo "  📦 Total items processed: $((MODEL_SUCCESS_COUNT + MODEL_FAILURE_COUNT + DATASET_SUCCESS_COUNT + DATASET_FAILURE_COUNT))"
+echo "  ✅ Total successful downloads: $((MODEL_SUCCESS_COUNT + DATASET_SUCCESS_COUNT))"
+echo "  ❌ Total failed downloads: $((MODEL_FAILURE_COUNT + DATASET_FAILURE_COUNT))"
+
+# Calculate success rate
+TOTAL_PROCESSED=$((MODEL_SUCCESS_COUNT + MODEL_FAILURE_COUNT + DATASET_SUCCESS_COUNT + DATASET_FAILURE_COUNT))
+if [ $TOTAL_PROCESSED -gt 0 ]; then
+    SUCCESS_RATE=$(( (MODEL_SUCCESS_COUNT + DATASET_SUCCESS_COUNT) * 100 / TOTAL_PROCESSED ))
+    echo "  📈 Success rate: ${SUCCESS_RATE}%"
+fi
 echo "========================================="

@@ -9,7 +9,7 @@ class AdapterModel(BaseModel):
     def __init__(self, config, model_pool=None, accelerator=None):
         super().__init__(config, model_pool=model_pool, accelerator=accelerator)
     
-    def _load_model(self):
+    def load_model(self):
         """
         Load adapter model. Need to pass the type as "adapter" to load the adapter model.
         """

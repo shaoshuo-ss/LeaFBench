@@ -57,7 +57,7 @@ class RAGModel(ModelInterface):
         """
         Generate answers for the given prompts using the RAG framework.
         """
-        model, tokenizer = self._load_model()
+        model, tokenizer = self.load_model()
         generation_params = {
             'max_new_tokens': self.params.get('max_new_tokens', 512),
             'temperature': self.params.get('temperature', 0.7),
