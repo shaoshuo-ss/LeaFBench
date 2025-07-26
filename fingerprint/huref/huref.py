@@ -6,7 +6,7 @@ from fingerprint.fingerprint_interface import LLMFingerprintInterface
 from fingerprint.huref.invariant_terms import MeanPooling, CNNEncode, get_invariant_terms
 from fingerprint.huref.sort_tokens_frequency import sort_tokens_frequency
 
-class HuRef(LLMFingerprintInterface):
+class HuRefFingerprint(LLMFingerprintInterface):
     """
     HuRef fingerprinting method.
     This class implements the HuRef fingerprinting technique.

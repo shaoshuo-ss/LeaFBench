@@ -3,7 +3,7 @@ from fingerprint.reef.generate_activation import load_statements, get_acts
 from fingerprint.reef.compute_cka import CKA
 
 
-class REEF(LLMFingerprintInterface):
+class REEFFingerprint(LLMFingerprintInterface):
     def __init__(self, config=None, accelerator=None):
         super().__init__(config=config, accelerator=accelerator)
 
@@ -34,7 +34,7 @@ class REEF(LLMFingerprintInterface):
         fingerprint = get_acts(
             self.statements, tokenizer, torch_model, 
             model.model_family, 
-            self.layers, 
+            self.layers,
             self.accelerator.device,
             batch_size=self.batch_size
         )
@@ -55,5 +55,7 @@ class REEF(LLMFingerprintInterface):
         cka = CKA(self.accelerator.device)
         base_fingerprint = base_model.get_fingerprint()
         testing_fingerprint = testing_model.get_fingerprint()
+        base_fingerprint = base_fingerprint.to(self.accelerator.device)
+        testing_fingerprint = testing_fingerprint.to(self.accelerator.device)
         cka_value = cka.linear_CKA(base_fingerprint, testing_fingerprint)
         return cka_value.item()

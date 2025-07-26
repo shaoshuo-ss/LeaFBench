@@ -3,7 +3,7 @@ from fingerprint.llmmap.inference import InferenceModel
 import torch
 import torch.nn.functional as F
 
-class LLMmap(LLMFingerprintInterface):
+class LLMmapFingerprint(LLMFingerprintInterface):
     """
     LLMmap fingerprinting method.
     This class implements the LLMmap fingerprinting technique.

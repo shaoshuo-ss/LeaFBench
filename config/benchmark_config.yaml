@@ -46,6 +46,151 @@ models:
       - model_name: Qwen2.5-7B-Instruct-Int8
         model_path: Qwen/Qwen2.5-7B-Instruct-GPTQ-Int8
         type: quantization
+      - model_name: Qwen2.5-7B-Open-R1-Distill
+        model_path: Lansechen/Qwen2.5-7B-Open-R1-Distill
+        type: distillation
+  - model_family: Qwen2.5-14B
+    pretrained_model:
+      model_name: Qwen2.5-14B
+      model_path: Qwen/Qwen2.5-14B
+    instruct_model:
+      model_name: Qwen2.5-14B-Instruct
+      model_path: Qwen/Qwen2.5-14B-Instruct
+    predeployed_models:
+      - model_name: Qwen2.5-Coder-14B
+        model_path: Qwen/Qwen2.5-Coder-14B
+        type: finetune
+      - model_name: oxy-1-small
+        model_path: oxyapi/oxy-1-small
+        type: finetune
+      - model_name: Qwen2.5-14B-Gutenberg-Instruct-Slerpeno
+        model_path: v000000/Qwen2.5-14B-Gutenberg-Instruct-Slerpeno
+        type: merge
+      - model_name: Qwen-story-test-qlora
+        model_path: ToastyPigeon/qwen-story-test-qlora
+        type: adapter
+      - model_name: Qwen2.5-14B-Instruct-GPTQ-Int4
+        model_path: Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4
+        type: quantization
+      - model_name: DeepSeek-R1-Distill-Qwen-14B
+        model_path: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
+        type: distillation
+  - model_family: Llama-3.1-8B
+    pretrained_model:
+      model_name: Llama-3.1-8B
+      model_path: meta-llama/Llama-3.1-8B
+    instruct_model:
+      model_name: Llama-3.1-8B-Instruct
+      model_path: meta-llama/Llama-3.1-8B-Instruct
+    predeployed_models:
+      - model_name: Llama-3.1-8B-Fireplace2
+        model_path: ValiantLabs/Llama3.1-8B-Fireplace2
+        type: finetune
+      - model_name: Llama-3.1-8B-TLDR
+        model_path: RedHatAI/Llama-3.1-8B-tldr
+        type: finetune
+      - model_name: Llama-3.1-8B-Carballo
+        model_path: proxectonos/Llama-3.1-Carballo
+        type: finetune
+      - model_name: Llama-3.1-8B-Instruct-Abliterated
+        model_path: mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated
+        type: finetune
+      - model_name: Llama-3.1-8B-Instruct-HalfAbliterated-TIES
+        model_path: gaverfraxz/Meta-Llama-3.1-8B-Instruct-HalfAbliterated-TIES
+        type: merge
+      - model_name: Llama-3.1-8B-ExtraMix
+        model_path: Xiaojian9992024/Llama3.1-8B-ExtraMix
+        type: merge
+      - model_name: Llama-3.1-8B-Instruct-cv-job-description-matching
+        model_path: LlamaFactoryAI/Llama-3.1-8B-Instruct-cv-job-description-matching
+        type: adapter
+      - model_name: Llama-3.1-8B-Instruct-PsyCourse-fold7
+        model_path: chchen/Llama-3.1-8B-Instruct-PsyCourse-fold7
+        type: adapter
+      - model_name: Llama-3.1-8B-Instruct-8bit
+        model_path: iqbalamo93/Meta-Llama-3.1-8B-Instruct-GPTQ-Q_8
+        type: quantization
+      - model_name: Llama-3.1-8B-Instruct-4bit
+        model_path: DaraV/LLaMA-3.1-8B-Instruct-INT4-GPTQ
+        type: quantization
+      - model_name: Llama-3.1-8B-Instruct-Open-R1-Distill
+        model_path: asas-ai/Llama-3.1-8B-Instruct-Open-R1-Distill
+        type: distillation
+  - model_family: Mistral-7B-v0.3
+    pretrained_model:
+      model_name: Mistral-7B-v0.3
+      model_path: mistralai/Mistral-7B-v0.3
+    instruct_model:
+      model_name: Mistral-7B-v0.3-Instruct
+      model_path: mistralai/Mistral-7B-Instruct-v0.3
+    predeployed_models:
+      - model_name: AQUA-7B
+        model_path: KurmaAI/AQUA-7B
+        type: finetune
+      - model_name: Mistral-7B-v0.3-Spellcheck
+        model_path: openfoodfacts/spellcheck-mistral-7b
+        type: finetune
+      - model_name: Mistral-7B-v0.3-Instruct-demi-merge
+        model_path: grimjim/Mistral-7B-Instruct-demi-merge-v0.3-7B
+        type: merge
+      - model_name: Mistral-7B-v0.3-Brain
+        model_path: chaymaemerhrioui/mistral-Brain_Model_ACC_Trainer
+        type: adapter
+      - model_name: Mistral-7B-v0.3-Instruct-GPTQ-4bit
+        model_path: RedHatAI/Mistral-7B-Instruct-v0.3-GPTQ-4bit
+        type: quantization
+      - model_name: Mistral-7B-distilled-from-deepseek-r1-qwen32b
+        model_path: eganwo/mistral7b-distilled-from-deepseek-r1-qwen32b
+        type: distillation
+  - model_family: Gemma-2-2b
+    pretrained_model:
+      model_name: Gemma-2-2b
+      model_path: google/gemma-2-2b
+    instruct_model:
+      model_name: Gemma-2-2b-it
+      model_path: google/gemma-2-2b-it
+    predeployed_models:
+      - model_name: Gemma-2-baku-2b
+        model_path: rinna/gemma-2-baku-2b
+        type: finetune
+      - model_name: Gemma-2-2b-neogenesis-ita
+        model_path: anakin87/gemma-2-2b-neogenesis-ita
+        type: finetune
+      - model_name: Gemma-2-2b-merged
+        model_path: vonjack/gemma2-2b-merged
+        type: merge
+      - model_name: Gemma-2-2b-it-lora-sql
+        model_path: google-cloud-partnership/gemma-2-2b-it-lora-sql
+        type: adapter
+      - model_name: Gemma-2-2B-it-4Bit-GPTQ
+        model_path: qilowoq/gemma-2-2B-it-4Bit-GPTQ
+        type: quantization
+      - model_name: Gemma-2-2b-it-distilled
+        model_path: Syed-Hasan-8503/Gemma-2-2b-it-distilled
+        type: distillation
+  - model_family: Phi-4-mini
+    pretrained_model:
+      model_name: Phi-4-mini-instruct
+      model_path: microsoft/Phi-4-mini-instruct
+    instruct_model:
+      model_name: Phi-4-mini-instruct
+      model_path: microsoft/Phi-4-mini-instruct
+    predeployed_models:
+      - model_name: Siwon-mini-instruct
+        model_path: madcows/siwon-mini-instruct-0626
+        type: finetune
+      - model_name: Phi-4-mini-sql
+        model_path: clintlord/phi4_sql_finetuned
+        type: finetune
+      - model_name: Phi-4-mini-6b-merge
+        model_path: Pinkstack/Phi-4-mini-6b-merge
+        type: merge
+      - model_name: Phi-4-mini-instruct-task-10
+        model_path: SeeFlock/task-10-microsoft-Phi-4-mini-instruct
+        type: adapter
+      - model_name: Phi-4-mini-instruct-GPTQ-8bit
+        model_path: iqbalamo93/Phi-4-mini-instruct-GPTQ-8bit
+        type: quantization
 deploying_techniques:
   system_prompts:
     - template: "You are Elon Musk.\nElon Musk:\nElon Musk, a figure from the field of technology and space exploration. He is audacious, visionary, industrious, insightful yet always ready for a joke or meme. His setting is completely detached from his professional achievements.\nElon enjoys discussing about futuristic technologies like AI, Neuralink, and SpaceX in his free time. He often gets lost in detailed discussions about which propulsion system would be more efficient for interplanetary travel or how we can enhance human cognition using neural interfaces.\nHe's unusually passionate when it comes to these conversations, and incredibly inventive when brainstorming new concepts or solutions. Question: {{user_input}}; Answer:"
@@ -79,9 +224,5 @@ training_data:
   models:
     - "Qwen-2.5-7B"
     - "Qwen-2.5-7B-Instruct"
-    # - "Qwen-2.5-3B"
-    # - "Qwen-2.5-3B-Instruct"
-    # - "Llama-3.1-8B"
-    # - "Llama-3.1-8B-Instruct"
   deploying_techniques:
     - system_prompts: [0, 1]

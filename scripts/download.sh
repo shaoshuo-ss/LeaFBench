@@ -39,18 +39,20 @@ MODELS_TO_DOWNLOAD=(
   "SeeFlock/task-12-Qwen-Qwen2.5-7B-Instruct"
   "Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4"
   "Qwen/Qwen2.5-7B-Instruct-GPTQ-Int8"
+  "Lansechen/Qwen2.5-7B-Open-R1-Distill"
   "meta-llama/Llama-3.1-8B"
   "meta-llama/Llama-3.1-8B-Instruct"
   "ValiantLabs/Llama3.1-8B-Fireplace2"
   "RedHatAI/Llama-3.1-8B-tldr"
   "proxectonos/Llama-3.1-Carballo"
   "mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated"
-  "gowtham58/MistLlama-0.1"
+  "Llama-3.1-TAIDE-R1-8B-Chat"
   "Xiaojian9992024/Llama3.1-8B-ExtraMix"
   "LlamaFactoryAI/Llama-3.1-8B-Instruct-cv-job-description-matching"
   "chchen/Llama-3.1-8B-Instruct-PsyCourse-fold7"
   "iqbalamo93/Meta-Llama-3.1-8B-Instruct-GPTQ-Q_8"
   "DaraV/LLaMA-3.1-8B-Instruct-INT4-GPTQ"
+  "asas-ai/Llama-3.1-8B-Instruct-Open-R1-Distill"
   "mistralai/Mistral-7B-v0.3"
   "mistralai/Mistral-7B-Instruct-v0.3"
   "KurmaAI/AQUA-7B"
@@ -95,7 +97,7 @@ DATASETS_TO_DOWNLOAD=(
 # provide your token here.
 # You can create a token here: https://huggingface.co/settings/tokens
 # Leave empty to download only public models.
-HF_TOKEN="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" # e.g., "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+HF_TOKEN="" # e.g., "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 
 # --- Script Body ---

@@ -154,12 +154,20 @@ def get_acts(statements, tokenizer, model, model_name, layers, device, token_pos
             batch_acts = hook.out[0][:, token_pos]  # [batch_size, hidden_size]
             acts[layer_idx].extend(batch_acts)
     
-    # stack len(statements)'s activations
-    for layer_idx, act in acts.items():
-        acts[layer_idx] = torch.stack(act).float()
+    # stack len(statements)'s activations and concatenate all layers
+    layer_activations = []
+    for layer_idx in layer_indices:
+        stacked_acts = torch.stack(acts[layer_idx]).float()  # [num_statements, hidden_size]
+        layer_activations.append(stacked_acts)
+    
+    # concatenate all layer activations into a single tensor
+    if len(layer_activations) == 1:
+        combined_acts = layer_activations[0]
+    else:
+        combined_acts = torch.cat(layer_activations, dim=1)  # [num_statements, hidden_size * num_layers]
     
     # remove hooks
     for handle in handles:
         handle.remove()
     
-    return acts
+    return combined_acts

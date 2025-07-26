@@ -35,9 +35,11 @@ if __name__ == "__main__":
     # initialize the fingerprint method with accelerator
     fingerprint_method = create_fingerprint_method(fingerprint_config, accelerator=accelerator)
 
+    # get cached fingerprints path for potential use in error handling
+    cached_fingerprints_path = fingerprint_config.get("cached_fingerprints_path", None)
+    
     # resume the cached fingerprints if available (only main process loads, then broadcast)
     if fingerprint_config.get("use_cache", False) and not fingerprint_config.get("re_fingerprinting"):
-        cached_fingerprints_path = fingerprint_config.get("cached_fingerprints_path", None)
         # if accelerator.is_main_process:
         load_fingerprints(cached_fingerprints_path, benchmark)
         # Wait for main process to finish loading before continuing
@@ -67,15 +69,24 @@ if __name__ == "__main__":
         # save the fingerprints if any error occurs (only on main process)
         if accelerator.is_main_process:
             logger.error(f"Error during fingerprint extraction: {e}")
-            logger.info("Saving fingerprints to cache due to error...")
-            save_fingerprints(cached_fingerprints_path, benchmark)
+            if cached_fingerprints_path is not None:
+                logger.info("Saving fingerprints to cache due to error...")
+                try:
+                    save_fingerprints(cached_fingerprints_path, benchmark)
+                    logger.info("Fingerprints saved successfully during error handling.")
+                except Exception as save_error:
+                    logger.error(f"Failed to save fingerprints during error handling: {save_error}")
+            else:
+                logger.warning("No cached fingerprints path specified, cannot save fingerprints during error.")
         raise
     
     # Save the fingerprints to cache (only on main process)
     if fingerprint_config.get("use_cache", False) and accelerator.is_main_process:
-        cached_fingerprints_path = fingerprint_config.get("cached_fingerprints_path", None)
-        save_fingerprints(cached_fingerprints_path, benchmark)
-        logger.info("Fingerprints saved to cache successfully!")
+        if cached_fingerprints_path is not None:
+            save_fingerprints(cached_fingerprints_path, benchmark)
+            logger.info("Fingerprints saved to cache successfully!")
+        else:
+            logger.warning("No cached fingerprints path specified, cannot save fingerprints to cache.")
     # compare fingerprints of different models
     if accelerator.is_main_process:
         logger.info("Comparing fingerprints of models...")

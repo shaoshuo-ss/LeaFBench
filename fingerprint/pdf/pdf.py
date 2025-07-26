@@ -3,9 +3,9 @@ from fingerprint.pdf.parameter_distribution import get_transformer_parameters, g
 import torch
 
 
-class PDF(LLMFingerprintInterface):
+class PDFFingerprint(LLMFingerprintInterface):
     """
-    PDF fingerprinting method for LLMs.
+    Parameter Distribution Fingerprinting method for LLMs.
     This class implements the fingerprinting logic specific to PDF models.
     """
 

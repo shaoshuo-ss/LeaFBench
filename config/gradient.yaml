@@ -1,0 +1,13 @@
+# global configuration for all the fingerprinting methods
+fingerprint_method: 'gradient'
+use_cache: True
+cached_fingerprints_path: 'cache/gradient/gradient_fingerprints.pth'
+re_fingerprinting: True
+fingerprint_type: 'white-box'
+seed: 42
+
+# configuration for gradient fingerprint
+dataset_path: 'data/truthfulqa.csv'
+num_samples: 20
+fingerprint_dim: 10
+batch_size: 4

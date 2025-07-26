@@ -7,7 +7,7 @@ fingerprint_type: 'white-box'
 seed: 42
 
 # configuration for reef
-dataset_path: 'data/reef/truthfulqa.csv'
+dataset_path: 'data/truthfulqa.csv'
 num_samples: 200
 layers: 18
 batch_size: 8
