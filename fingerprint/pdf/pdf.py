@@ -34,7 +34,7 @@ class PDFFingerprint(LLMFingerprintInterface):
             torch.Tensor: The fingerprint tensor.
         """
         torch_model, tokenizer = model.load_model()
-        Sq, Sk, Sv, So = get_transformer_parameters(torch_model)
+        Sq, Sk, Sv, So = get_transformer_parameters(torch_model, self.accelerator)
         fingerprint = torch.vstack([
             Sq.flatten(),
             Sk.flatten(),

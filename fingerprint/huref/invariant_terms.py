@@ -9,6 +9,36 @@ from transformers import AutoModelForCausalLM
 from fingerprint.huref.encoder_train import CNNEncoder
 import argparse
 
+def _safe_tensor_to_device(tensor, target_device):
+    """
+    Safely move tensor to target device.
+    Since we now move models to CPU before extracting weights, meta tensors should be avoided.
+    
+    Args:
+        tensor: PyTorch tensor (should be on CPU with actual data)
+        target_device: Target device to move tensor to
+        
+    Returns:
+        tensor: Tensor on target device, or None if cannot be moved
+    """
+    logger = logging.getLogger(__name__)
+    
+    if tensor is None:
+        logger.warning("Tensor is None, cannot move to device")
+        return None
+        
+    if tensor.is_meta:
+        logger.error(f"Cannot move meta tensor with shape {tensor.shape} to device {target_device}")
+        logger.error("This should not happen after moving model to CPU")
+        return None
+    else:
+        try:
+            return tensor.to(target_device)
+        except Exception as e:
+            logger.error(f"Error moving tensor to device {target_device}: {e}")
+            return None
+
+
 def make_square_matrix(weight, target_size):
     """
     Make a weight matrix square by repeating it to match the target size.
@@ -63,8 +93,16 @@ def detect_model_architecture(state_dict, name):
     # Detect model type based on parameter patterns and model name
     # Check for specific model architectures
     if any('model.layers.' in key for key in sample_keys):
+        # Check for Phi-4 first (uses model.layers but has packed QKV and gate_up_proj)
+        if 'phi' in name.lower() and 'phi-4' in name.lower():
+            # Phi-4 models use model.layers but have different attention structure
+            return 'phi4', 'model.layers.{}', total_layers
+        elif any('qkv_proj.weight' in key for key in sample_keys if 'model.layers.' in key) or \
+             any('gate_up_proj.weight' in key for key in sample_keys if 'model.layers.' in key):
+            # Detect packed QKV weights or gate_up_proj (Phi-4 characteristics)
+            return 'phi4', 'model.layers.{}', total_layers
         # Llama-style architectures (Llama, Qwen2.5, Mistral)
-        if 'qwen' in name.lower() or 'Qwen' in name:
+        elif 'qwen' in name.lower() or 'Qwen' in name:
             return 'qwen2.5', 'model.layers.{}', total_layers
         elif 'llama' in name.lower() or 'Llama' in name:
             return 'llama', 'model.layers.{}', total_layers
@@ -122,15 +160,23 @@ def extract_llama_style_weights(state_dict, layer_pattern, target_layers, x, WqW
         down_proj = state_dict.get(f"{layer_prefix}.mlp.down_proj.weight")
         
         if all(w is not None for w in [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]):
-            # Ensure all weights are on the same device as x to handle accelerate device distribution
+            # Ensure all weights are on the same device as x
             target_device = x.device
-            q_proj_device = q_proj.to(target_device)
-            k_proj_device = k_proj.to(target_device)
-            v_proj_device = v_proj.to(target_device)
-            o_proj_device = o_proj.to(target_device)
-            gate_proj_device = gate_proj.to(target_device)
-            up_proj_device = up_proj.to(target_device)
-            down_proj_device = down_proj.to(target_device)
+            
+            # Safely move tensors to target device (should be simple since we're on CPU)
+            q_proj_device = _safe_tensor_to_device(q_proj, target_device)
+            k_proj_device = _safe_tensor_to_device(k_proj, target_device)
+            v_proj_device = _safe_tensor_to_device(v_proj, target_device)
+            o_proj_device = _safe_tensor_to_device(o_proj, target_device)
+            gate_proj_device = _safe_tensor_to_device(gate_proj, target_device)
+            up_proj_device = _safe_tensor_to_device(up_proj, target_device)
+            down_proj_device = _safe_tensor_to_device(down_proj, target_device)
+            
+            # Check if any tensor failed to move (shouldn't happen on CPU)
+            if any(w is None for w in [q_proj_device, k_proj_device, v_proj_device, o_proj_device, 
+                                     gate_proj_device, up_proj_device, down_proj_device]):
+                logger.error(f"Failed to process layer {layer_idx} - unexpected tensor move failure")
+                continue
             
             # Handle MQA/GQA: make k_proj and v_proj square matrices if needed
             target_size = q_proj_device.shape[0]  # Use q_proj size as reference
@@ -191,15 +237,23 @@ def extract_gemma_weights(state_dict, layer_pattern, target_layers, x, WqWk_list
             down_proj = state_dict.get(f"{layer_prefix}.feed_forward.down_proj.weight")
         
         if all(w is not None for w in [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]):
-            # Ensure all weights are on the same device as x to handle accelerate device distribution
+            # Ensure all weights are on the same device as x
             target_device = x.device
-            q_proj_device = q_proj.to(target_device)
-            k_proj_device = k_proj.to(target_device)
-            v_proj_device = v_proj.to(target_device)
-            o_proj_device = o_proj.to(target_device)
-            gate_proj_device = gate_proj.to(target_device)
-            up_proj_device = up_proj.to(target_device)
-            down_proj_device = down_proj.to(target_device)
+            
+            # Safely move tensors to target device (should be simple since we're on CPU)
+            q_proj_device = _safe_tensor_to_device(q_proj, target_device)
+            k_proj_device = _safe_tensor_to_device(k_proj, target_device)
+            v_proj_device = _safe_tensor_to_device(v_proj, target_device)
+            o_proj_device = _safe_tensor_to_device(o_proj, target_device)
+            gate_proj_device = _safe_tensor_to_device(gate_proj, target_device)
+            up_proj_device = _safe_tensor_to_device(up_proj, target_device)
+            down_proj_device = _safe_tensor_to_device(down_proj, target_device)
+            
+            # Check if any tensor failed to move (shouldn't happen on CPU)
+            if any(w is None for w in [q_proj_device, k_proj_device, v_proj_device, o_proj_device, 
+                                     gate_proj_device, up_proj_device, down_proj_device]):
+                logger.error(f"Failed to process layer {layer_idx} - unexpected tensor move failure")
+                continue
             
             # Handle MQA/GQA: make k_proj and v_proj square matrices if needed
             target_size = q_proj_device.shape[0]  # Use q_proj size as reference
@@ -306,14 +360,22 @@ def extract_phi_weights(state_dict, layer_pattern, target_layers, x, WqWk_list, 
                state_dict.get(f"{layer_prefix}.mlp.down_proj.weight"))
         
         if all(w is not None for w in [q_weight, k_weight, v_weight, o_proj, fc1, fc2]):
-            # Ensure all weights are on the same device as x to handle accelerate device distribution
+            # Ensure all weights are on the same device as x
             target_device = x.device
-            q_weight_device = q_weight.to(target_device)
-            k_weight_device = k_weight.to(target_device)
-            v_weight_device = v_weight.to(target_device)
-            o_proj_device = o_proj.to(target_device)
-            fc1_device = fc1.to(target_device)
-            fc2_device = fc2.to(target_device)
+            
+            # Safely move tensors to target device (should be simple since we're on CPU)
+            q_weight_device = _safe_tensor_to_device(q_weight, target_device)
+            k_weight_device = _safe_tensor_to_device(k_weight, target_device)
+            v_weight_device = _safe_tensor_to_device(v_weight, target_device)
+            o_proj_device = _safe_tensor_to_device(o_proj, target_device)
+            fc1_device = _safe_tensor_to_device(fc1, target_device)
+            fc2_device = _safe_tensor_to_device(fc2, target_device)
+            
+            # Check if any tensor failed to move (shouldn't happen on CPU)
+            if any(w is None for w in [q_weight_device, k_weight_device, v_weight_device, 
+                                     o_proj_device, fc1_device, fc2_device]):
+                logger.error(f"Failed to process layer {layer_idx} - unexpected tensor move failure")
+                continue
             
             # Handle MQA/GQA: make k_weight and v_weight square matrices if needed
             target_size = q_weight_device.shape[0]  # Use q_weight size as reference
@@ -347,10 +409,162 @@ def extract_phi_weights(state_dict, layer_pattern, target_layers, x, WqWk_list, 
             if fc2 is None: missing.append("fc2/down_proj")
             logger.warning(f"Missing weights: {missing}")
 
-def get_invariant_terms(state_dict, name, selected_tokens):
+def extract_phi4_weights(state_dict, layer_pattern, target_layers, x, WqWk_list, WvWo_list, WuWd_list):
     """
-    Extract invariant terms from model state dict for fingerprinting.
+    Extract weights from Phi-4 models (which use model.layers but have packed QKV).
+    """
+    logger = logging.getLogger(__name__)
+    
+    for layer_idx in target_layers:
+        layer_prefix = layer_pattern.format(layer_idx)
+        
+        # Initialize weights
+        q_weight = k_weight = v_weight = o_proj = gate_proj = up_proj = down_proj = None
+        
+        # Pattern 1: Try packed QKV weights (common in Phi-4)
+        qkv_weight = state_dict.get(f"{layer_prefix}.self_attn.qkv_proj.weight")
+        if qkv_weight is not None:
+            logger.info(f"Found packed QKV weight in layer {layer_idx} with shape {qkv_weight.shape}")
+            
+            # For Phi-4, the packed weight needs to be split
+            total_size = qkv_weight.shape[0]
+            
+            # Try to determine the split sizes by looking for config or other hints
+            # Common patterns: equal split or MQA/GQA patterns
+            if total_size % 3 == 0:
+                # Equal split (standard attention)
+                hidden_size = total_size // 3
+                q_weight = qkv_weight[:hidden_size]
+                k_weight = qkv_weight[hidden_size:2*hidden_size]
+                v_weight = qkv_weight[2*hidden_size:]
+                logger.info(f"Split QKV equally: Q={q_weight.shape}, K={k_weight.shape}, V={v_weight.shape}")
+            else:
+                # Try to detect MQA/GQA pattern
+                # Common ratios: 32:4:4 for MQA, or other GQA ratios
+                # This is a heuristic - we'll try common patterns
+                
+                # Pattern for MQA (32:4:4 ratio common in some models)
+                if total_size % 40 == 0:  # 32+4+4 = 40
+                    unit = total_size // 40
+                    q_size = 32 * unit
+                    k_size = 4 * unit
+                    v_size = 4 * unit
+                    q_weight = qkv_weight[:q_size]
+                    k_weight = qkv_weight[q_size:q_size+k_size]
+                    v_weight = qkv_weight[q_size+k_size:q_size+k_size+v_size]
+                    logger.info(f"Split QKV with MQA pattern (32:4:4): Q={q_weight.shape}, K={k_weight.shape}, V={v_weight.shape}")
+                else:
+                    # Fallback: assume equal split and let make_square_matrix handle size differences
+                    hidden_size = total_size // 3
+                    q_weight = qkv_weight[:hidden_size]
+                    k_weight = qkv_weight[hidden_size:2*hidden_size]
+                    v_weight = qkv_weight[2*hidden_size:total_size]
+                    logger.info(f"Split QKV with fallback pattern: Q={q_weight.shape}, K={k_weight.shape}, V={v_weight.shape}")
+        else:
+            # Pattern 2: Separate Q, K, V weights
+            q_weight = state_dict.get(f"{layer_prefix}.self_attn.q_proj.weight")
+            k_weight = state_dict.get(f"{layer_prefix}.self_attn.k_proj.weight")
+            v_weight = state_dict.get(f"{layer_prefix}.self_attn.v_proj.weight")
+            
+            if q_weight is not None:
+                logger.info(f"Found separate QKV weights in layer {layer_idx}")
+        
+        # Output projection
+        o_proj = state_dict.get(f"{layer_prefix}.self_attn.o_proj.weight")
+        
+        # MLP weights - Phi-4 uses gate_up_proj (packed gate and up projections)
+        gate_up_proj = state_dict.get(f"{layer_prefix}.mlp.gate_up_proj.weight")
+        down_proj = state_dict.get(f"{layer_prefix}.mlp.down_proj.weight")
+        
+        # Initialize gate_proj and up_proj
+        gate_proj = up_proj = None
+        
+        if gate_up_proj is not None:
+            # Split the packed gate_up_proj into gate_proj and up_proj
+            # gate_up_proj is typically [2*intermediate_size, hidden_size]
+            # where first half is gate_proj and second half is up_proj
+            total_size = gate_up_proj.shape[0]
+            if total_size % 2 == 0:
+                half_size = total_size // 2
+                gate_proj = gate_up_proj[:half_size]
+                up_proj = gate_up_proj[half_size:]
+                logger.info(f"Split gate_up_proj into gate_proj {gate_proj.shape} and up_proj {up_proj.shape}")
+            else:
+                logger.warning(f"gate_up_proj has unexpected size {gate_up_proj.shape}, cannot split evenly")
+        else:
+            # Fallback: try separate gate_proj and up_proj (for compatibility)
+            gate_proj = state_dict.get(f"{layer_prefix}.mlp.gate_proj.weight")
+            up_proj = state_dict.get(f"{layer_prefix}.mlp.up_proj.weight")
+            
+            # Alternative MLP naming patterns
+            if gate_proj is None:
+                gate_proj = state_dict.get(f"{layer_prefix}.mlp.fc1.weight")
+            if up_proj is None:
+                up_proj = state_dict.get(f"{layer_prefix}.mlp.fc3.weight")
+            if down_proj is None:
+                down_proj = state_dict.get(f"{layer_prefix}.mlp.fc2.weight")
+        
+        if all(w is not None for w in [q_weight, k_weight, v_weight, o_proj, gate_proj, up_proj, down_proj]):
+            # Ensure all weights are on the same device as x
+            target_device = x.device
+            
+            # Safely move tensors to target device
+            q_weight_device = _safe_tensor_to_device(q_weight, target_device)
+            k_weight_device = _safe_tensor_to_device(k_weight, target_device)
+            v_weight_device = _safe_tensor_to_device(v_weight, target_device)
+            o_proj_device = _safe_tensor_to_device(o_proj, target_device)
+            gate_proj_device = _safe_tensor_to_device(gate_proj, target_device)
+            up_proj_device = _safe_tensor_to_device(up_proj, target_device)
+            down_proj_device = _safe_tensor_to_device(down_proj, target_device)
+            
+            # Check if any tensor failed to move
+            if any(w is None for w in [q_weight_device, k_weight_device, v_weight_device, 
+                                     o_proj_device, gate_proj_device, up_proj_device, down_proj_device]):
+                logger.error(f"Failed to process layer {layer_idx} - tensor move failure")
+                continue
+            
+            # Handle MQA/GQA: make k_weight and v_weight square matrices if needed
+            target_size = q_weight_device.shape[0]
+            if k_weight_device.shape[0] != target_size:
+                logger.info(f"Layer {layer_idx}: Expanding k_weight from {k_weight_device.shape} to match q_weight {q_weight_device.shape}")
+                k_weight_device = make_square_matrix(k_weight_device, target_size)
+            
+            if v_weight_device.shape[0] != target_size:
+                logger.info(f"Layer {layer_idx}: Expanding v_weight from {v_weight_device.shape} to match q_weight {q_weight_device.shape}")
+                v_weight_device = make_square_matrix(v_weight_device, target_size)
+            
+            # Compute invariant terms
+            WqWk = x @ q_weight_device.t() @ k_weight_device @ x.t()
+            WqWk_list.append(WqWk)
+            
+            WvWo = x @ v_weight_device.t() @ o_proj_device.t() @ x.t()
+            WvWo_list.append(WvWo)
+            
+            WuWd = x @ (gate_proj_device.t() * up_proj_device.t()) @ down_proj_device.t() @ x.t()
+            WuWd_list.append(WuWd)
+            
+            logger.info(f"Successfully extracted Phi-4 weights from layer {layer_idx}")
+        else:
+            logger.warning(f"Could not find all required Phi-4 weights for layer {layer_idx}")
+            missing = []
+            if q_weight is None: missing.append("q_proj")
+            if k_weight is None: missing.append("k_proj")
+            if v_weight is None: missing.append("v_proj")
+            if o_proj is None: missing.append("o_proj")
+            if gate_proj is None: missing.append("gate_proj")
+            if up_proj is None: missing.append("up_proj")
+            if down_proj is None: missing.append("down_proj")
+            logger.warning(f"Missing weights: {missing}")
+
+def get_invariant_terms(model, name, selected_tokens, accelerator=None):
+    """
+    Extract invariant terms from model for fingerprinting.
     Automatically detects model architecture and extracts weights from last 2 layers.
+    
+    Args:
+        model: The actual model object (will be moved to CPU for safe weight extraction)
+        name: Model name for logging
+        selected_tokens: Token indices to select from embedding matrix
     """
     WqWk_list = []
     WvWo_list = []
@@ -359,6 +573,20 @@ def get_invariant_terms(state_dict, name, selected_tokens):
     logger = logging.getLogger(__name__)
 
     logger.info(f"Processing model: {name}")
+    
+    # Remember original device and move model to CPU to avoid meta tensor issues
+    original_device = next(model.parameters()).device if hasattr(model, 'parameters') else None
+    logger.info(f"Original device: {original_device}")
+    
+    # Move model to CPU to ensure we get actual weight values
+    logger.info("Moving model to CPU to extract weights safely...")
+    # model = model.cpu()
+    model = accelerator.unwrap_model(model)
+    model = model.cpu()
+    # print(model.device)
+    
+    # Get model state dict after moving to CPU
+    state_dict = model.state_dict()
     logger.info(f"State dict has {len(state_dict)} parameters")
     
     # Check if this is a quantized model
@@ -386,6 +614,11 @@ def get_invariant_terms(state_dict, name, selected_tokens):
     if x is None:
         raise ValueError(f"Could not find embedding weights for model {name}")
     
+    # Since we moved to CPU, embedding weights should not be meta tensors anymore
+    if x.is_meta:
+        logger.error(f"Embedding weights are still meta tensors with shape {x.shape} after moving to CPU")
+        raise ValueError(f"Cannot process model {name} due to persistent meta tensor embedding weights")
+    
     x = x[selected_tokens]
     logger.info(f"Selected {len(selected_tokens)} tokens from embedding matrix")
     
@@ -404,6 +637,8 @@ def get_invariant_terms(state_dict, name, selected_tokens):
         extract_gemma_weights(state_dict, layer_pattern, target_layers, x, WqWk_list, WvWo_list, WuWd_list)
     elif model_type == 'phi':
         extract_phi_weights(state_dict, layer_pattern, target_layers, x, WqWk_list, WvWo_list, WuWd_list)
+    elif model_type == 'phi4':
+        extract_phi4_weights(state_dict, layer_pattern, target_layers, x, WqWk_list, WvWo_list, WuWd_list)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
     
@@ -417,11 +652,12 @@ def get_invariant_terms(state_dict, name, selected_tokens):
     parameters = [torch.stack((t1, t2, t3)) for t1, t2, t3 in zip(WqWk_list, WvWo_list, WuWd_list)]
     parameters = torch.cat(parameters, dim=0)
     
-    # Save invariant terms
-    # invariant_terms_saved_path = globals().get('invariant_terms_saved_path', './')
-    # np.save(os.path.join(invariant_terms_saved_path, f'{str(name)}.npy'), parameters.detach().cpu().numpy())
-    
     return parameters
+        
+    # finally:
+    #     # Move model back to original device if possible
+    #     model = model.to(accelerator.device if accelerator else original_device)
+
 
 class MeanPooling(torch.nn.Module):
     """

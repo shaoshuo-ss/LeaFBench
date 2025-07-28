@@ -1,6 +1,5 @@
 # global configuration for all the fingerprinting methods
 fingerprint_method: 'llmmap'
-use_cache: True
 cached_fingerprints_path: 'cache/llmmap/llmmap_fingerprints.pth'
 re_fingerprinting: False
 fingerprint_type: 'black-box'
@@ -24,7 +23,7 @@ inference_model:
   with_add_dense_class: False
   emb_size: 1024
   num_queries: 8
-  inference_model_path: 'cache/llmmap/llmmap_inf_model.pth'
+  inference_model_path: 'models/llmmap/model.pth'
   train_config:
     epochs: 10
     batch_size: 32

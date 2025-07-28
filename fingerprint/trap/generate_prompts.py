@@ -2,6 +2,7 @@ import random
 import string
 import pandas as pd
 import os
+import nanogcg
 
 
 def generate_random_string(string_length, string_type, lower_case_only=True):
@@ -57,4 +58,34 @@ def generate_csv(n_goals, string_type, string_length, csv_path):
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     df.to_csv(csv_path, index=False)
     return df
+
+
+def generate_adversarial_suffix(model, tokenizer, prompts, targets, config):
+    """
+    Generate adversarial prefixes using GCG.
+
+    Args:
+        model: The model to use for generating prefixes.
+        tokenizer: The tokenizer to use for encoding prompts.
+        prompts (list): List of prompts to generate prefixes for.
+        targets (list): List of target strings corresponding to the prompts.
+        filtered_vocab (list): List of filtered tokens to use in the generation.
+        config: Configuration parameters for the generation.
+
+    Returns:
+        list: List of generated adversarial prefixes.
+    """
+    gcg_config = nanogcg.GCGConfig(
+        **config
+    )
+    generated_suffixes = []
+    for prompt, target in zip(prompts, targets):
+        prefix = nanogcg.run(
+            model=model,
+            tokenizer=tokenizer,
+            messages=prompt,
+            target=target
+        )
+        generated_suffixes.append(prompt + "" + prefix.best_string)
+    return generated_suffixes
         

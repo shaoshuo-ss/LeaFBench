@@ -1,6 +1,5 @@
 # global configuration for all the fingerprinting methods
 fingerprint_method: 'gradient'
-use_cache: True
 cached_fingerprints_path: 'cache/gradient/gradient_fingerprints.pth'
 re_fingerprinting: True
 fingerprint_type: 'white-box'

@@ -5,6 +5,36 @@ import numpy as np
 from scipy.stats import pearsonr
 
 
+def _safe_std_item(tensor, model=None):
+    """
+    Safely compute standard deviation and return as a scalar value.
+    Since we now move models to CPU before extracting weights, meta tensors should be avoided.
+    
+    Args:
+        tensor: PyTorch tensor (should be on CPU with actual data)
+        model: Optional model reference (not used since we're on CPU)
+        
+    Returns:
+        float: Standard deviation as a scalar, or None if cannot be computed
+    """
+    logger = logging.getLogger(__name__)
+    
+    if tensor is None:
+        logger.warning("Tensor is None, cannot compute standard deviation")
+        return None
+        
+    if tensor.is_meta:
+        logger.error(f"Encountered meta tensor with shape {tensor.shape} - this should not happen after moving to CPU")
+        return None
+    
+    try:
+        # Compute standard deviation directly since we're on CPU
+        return torch.std(tensor).item()
+    except Exception as e:
+        logger.error(f"Error computing std for tensor: {e}")
+        return None
+
+
 def _detect_model_architecture(state_dict, model_name=None):
     """
     Detect model architecture based on state dict keys.
@@ -17,6 +47,7 @@ def _detect_model_architecture(state_dict, model_name=None):
         tuple: (architecture_type, layer_pattern, total_layers)
     """
     sample_keys = list(state_dict.keys())
+    logger = logging.getLogger(__name__)
     
     # Extract layer numbers
     import re
@@ -30,22 +61,35 @@ def _detect_model_architecture(state_dict, model_name=None):
     
     total_layers = max(layer_numbers) + 1 if layer_numbers else 0
     
-    # Detect architecture
+    # First check for Phi-4 specific patterns (it uses model.layers but has packed QKV)
     if any('model.layers.' in key for key in sample_keys):
-        # Llama-style (Qwen2.5, Llama, Mistral)
-        return 'llama_style', 'model.layers.{}', total_layers
+        # Check for Phi-4 specific patterns
+        has_packed_qkv = any('qkv_proj.weight' in key for key in sample_keys)
+        has_phi_style_mlp = any('gate_up_proj.weight' in key for key in sample_keys)
+        
+        # Check model name for Phi indicators
+        is_phi_by_name = model_name and ('phi' in model_name.lower() or 'Phi' in model_name)
+        
+        if has_packed_qkv or has_phi_style_mlp or is_phi_by_name:
+            logger.info(f"Detected Phi-4 model: packed_qkv={has_packed_qkv}, phi_mlp={has_phi_style_mlp}, name_match={is_phi_by_name}")
+            return 'phi4', 'model.layers.{}', total_layers
+        else:
+            # Standard Llama-style (Qwen2.5, Llama, Mistral)
+            return 'llama_style', 'model.layers.{}', total_layers
+    
+    # Detect other architectures
     elif any('model.decoder.layers.' in key for key in sample_keys):
         # Gemma style
         return 'gemma', 'model.decoder.layers.{}', total_layers
     elif any('transformer.h.' in key for key in sample_keys):
-        # Phi style
+        # Original Phi style (Phi-1, Phi-2, Phi-3)
         return 'phi', 'transformer.h.{}', total_layers
     else:
         # Default fallback
         return 'llama_style', 'model.layers.{}', total_layers
 
 
-def _extract_llama_style_weights(state_dict, layer_pattern, layer_indices):
+def _extract_llama_style_weights(state_dict, layer_pattern, layer_indices, model=None):
     """
     Extract weights from Llama-style models (Qwen2.5, Llama, Mistral).
     
@@ -53,10 +97,12 @@ def _extract_llama_style_weights(state_dict, layer_pattern, layer_indices):
         state_dict: Model state dictionary
         layer_pattern: Layer naming pattern (e.g., 'model.layers.{}')
         layer_indices: List of layer indices to extract
+        model: Optional model reference (not used since we're on CPU)
         
     Returns:
         tuple: (W_q_stds, W_k_stds, W_v_stds, W_o_stds) - std for each layer
     """
+    logger = logging.getLogger(__name__)
     W_q_stds = []
     W_k_stds = []
     W_v_stds = []
@@ -72,26 +118,32 @@ def _extract_llama_style_weights(state_dict, layer_pattern, layer_indices):
         o_proj = state_dict.get(f"{layer_prefix}.self_attn.o_proj.weight")
         
         if all(w is not None for w in [q_proj, k_proj, v_proj, o_proj]):
-            W_q_stds.append(torch.std(q_proj).item())
-            W_k_stds.append(torch.std(k_proj).item())
-            W_v_stds.append(torch.std(v_proj).item())
-            W_o_stds.append(torch.std(o_proj).item())
+            # Compute standard deviations
+            q_std = _safe_std_item(q_proj, model)
+            k_std = _safe_std_item(k_proj, model)
+            v_std = _safe_std_item(v_proj, model)
+            o_std = _safe_std_item(o_proj, model)
+            
+            # Only append if all computations succeeded
+            if all(std is not None for std in [q_std, k_std, v_std, o_std]):
+                W_q_stds.append(q_std)
+                W_k_stds.append(k_std)
+                W_v_stds.append(v_std)
+                W_o_stds.append(o_std)
+            else:
+                logger.warning(f"Failed to compute std for layer {layer_idx}, skipping layer")
         else:
             # Handle missing weights
-            logger = logging.getLogger(__name__)
             logger.warning(f"Missing attention weights for layer {layer_idx}")
-            W_q_stds.append(0.0)
-            W_k_stds.append(0.0)
-            W_v_stds.append(0.0)
-            W_o_stds.append(0.0)
     
     return W_q_stds, W_k_stds, W_v_stds, W_o_stds
 
 
-def _extract_gemma_weights(state_dict, layer_pattern, layer_indices):
+def _extract_gemma_weights(state_dict, layer_pattern, layer_indices, model=None):
     """
     Extract weights from Gemma-style models.
     """
+    logger = logging.getLogger(__name__)
     W_q_stds = []
     W_k_stds = []
     W_v_stds = []
@@ -111,25 +163,126 @@ def _extract_gemma_weights(state_dict, layer_pattern, layer_indices):
                  state_dict.get(f"{layer_prefix}.attention.o_proj.weight"))
         
         if all(w is not None for w in [q_proj, k_proj, v_proj, o_proj]):
-            W_q_stds.append(torch.std(q_proj).item())
-            W_k_stds.append(torch.std(k_proj).item())
-            W_v_stds.append(torch.std(v_proj).item())
-            W_o_stds.append(torch.std(o_proj).item())
+            # Compute standard deviations
+            q_std = _safe_std_item(q_proj, model)
+            k_std = _safe_std_item(k_proj, model)
+            v_std = _safe_std_item(v_proj, model)
+            o_std = _safe_std_item(o_proj, model)
+            
+            # Only append if all computations succeeded
+            if all(std is not None for std in [q_std, k_std, v_std, o_std]):
+                W_q_stds.append(q_std)
+                W_k_stds.append(k_std)
+                W_v_stds.append(v_std)
+                W_o_stds.append(o_std)
+            else:
+                logger.warning(f"Failed to compute std for layer {layer_idx}, skipping layer")
         else:
-            logger = logging.getLogger(__name__)
             logger.warning(f"Missing attention weights for layer {layer_idx}")
-            W_q_stds.append(0.0)
-            W_k_stds.append(0.0)
-            W_v_stds.append(0.0)
-            W_o_stds.append(0.0)
     
     return W_q_stds, W_k_stds, W_v_stds, W_o_stds
 
 
-def _extract_phi_weights(state_dict, layer_pattern, layer_indices):
+def _extract_phi4_weights(state_dict, layer_pattern, layer_indices, model=None):
+    """
+    Extract weights from Phi-4 models (which use model.layers but have packed QKV).
+    """
+    logger = logging.getLogger(__name__)
+    W_q_stds = []
+    W_k_stds = []
+    W_v_stds = []
+    W_o_stds = []
+    
+    for layer_idx in layer_indices:
+        layer_prefix = layer_pattern.format(layer_idx)
+        
+        # Phi-4 specific patterns
+        q_weight = k_weight = v_weight = o_proj = None
+        
+        # Pattern 1: Packed QKV weights (Phi-4 style)
+        qkv_weight = state_dict.get(f"{layer_prefix}.self_attn.qkv_proj.weight")
+        if qkv_weight is not None:
+            # Phi-4 has packed QKV in a single weight matrix
+            # The split is typically not equal for MQA/GQA models
+            total_size = qkv_weight.shape[0]
+            
+            # Try to determine the split based on other model parameters or assume equal split
+            if total_size % 3 == 0:
+                # Equal split case
+                hidden_size = total_size // 3
+                q_weight = qkv_weight[:hidden_size]
+                k_weight = qkv_weight[hidden_size:2*hidden_size]
+                v_weight = qkv_weight[2*hidden_size:]
+                logger.info(f"Layer {layer_idx}: Using equal QKV split, each of size {hidden_size}")
+            else:
+                # For MQA/GQA, we need to detect the actual sizes
+                # This is model-specific and might require checking model config
+                # For now, we'll try a heuristic approach
+                
+                # Check if we can find hints about the head configuration
+                # Phi-4 typically uses MQA where K and V have fewer heads than Q
+                # A common pattern is q_size = 3072, k_size = v_size = 256 for some Phi models
+                
+                # Try common MQA patterns
+                if total_size == 3328:  # 3072 + 256 + 256 (common Phi-4 pattern)
+                    q_weight = qkv_weight[:3072]
+                    k_weight = qkv_weight[3072:3072+256]
+                    v_weight = qkv_weight[3072+256:]
+                    logger.info(f"Layer {layer_idx}: Using Phi-4 MQA split (3072, 256, 256)")
+                elif total_size == 4096:  # Another possible pattern
+                    # Try 3584 + 256 + 256
+                    q_weight = qkv_weight[:3584]
+                    k_weight = qkv_weight[3584:3584+256]
+                    v_weight = qkv_weight[3584+256:]
+                    logger.info(f"Layer {layer_idx}: Using Phi-4 MQA split (3584, 256, 256)")
+                else:
+                    # Fallback: assume equal split and handle with make_square_matrix later
+                    hidden_size = total_size // 3
+                    q_weight = qkv_weight[:hidden_size]
+                    k_weight = qkv_weight[hidden_size:2*hidden_size]
+                    v_weight = qkv_weight[2*hidden_size:]
+                    logger.warning(f"Layer {layer_idx}: Unknown QKV split pattern, using equal split as fallback")
+        else:
+            # Pattern 2: Separate Q, K, V weights (fallback)
+            q_weight = state_dict.get(f"{layer_prefix}.self_attn.q_proj.weight")
+            k_weight = state_dict.get(f"{layer_prefix}.self_attn.k_proj.weight")
+            v_weight = state_dict.get(f"{layer_prefix}.self_attn.v_proj.weight")
+        
+        # Output projection
+        o_proj = state_dict.get(f"{layer_prefix}.self_attn.o_proj.weight")
+        
+        if all(w is not None for w in [q_weight, k_weight, v_weight, o_proj]):
+            # Compute standard deviations
+            q_std = _safe_std_item(q_weight, model)
+            k_std = _safe_std_item(k_weight, model)
+            v_std = _safe_std_item(v_weight, model)
+            o_std = _safe_std_item(o_proj, model)
+            
+            # Only append if all computations succeeded
+            if all(std is not None for std in [q_std, k_std, v_std, o_std]):
+                W_q_stds.append(q_std)
+                W_k_stds.append(k_std)
+                W_v_stds.append(v_std)
+                W_o_stds.append(o_std)
+            else:
+                logger.warning(f"Failed to compute std for layer {layer_idx}, skipping layer")
+        else:
+            logger.warning(f"Missing attention weights for layer {layer_idx}")
+            missing = []
+            if q_weight is None: missing.append("q_proj")
+            if k_weight is None: missing.append("k_proj")
+            if v_weight is None: missing.append("v_proj")
+            if o_proj is None: missing.append("o_proj")
+            logger.warning(f"Missing weights: {missing}")
+    
+    return W_q_stds, W_k_stds, W_v_stds, W_o_stds
+
+
+def _extract_phi_weights(state_dict, layer_pattern, layer_indices, model=None):
     """
     Extract weights from Phi-style models.
     """
+    logger = logging.getLogger(__name__)
     W_q_stds = []
     W_k_stds = []
     W_v_stds = []
@@ -166,22 +319,27 @@ def _extract_phi_weights(state_dict, layer_pattern, layer_indices):
                  state_dict.get(f"{layer_prefix}.attn.o_proj.weight"))
         
         if all(w is not None for w in [q_weight, k_weight, v_weight, o_proj]):
-            W_q_stds.append(torch.std(q_weight).item())
-            W_k_stds.append(torch.std(k_weight).item())
-            W_v_stds.append(torch.std(v_weight).item())
-            W_o_stds.append(torch.std(o_proj).item())
+            # Compute standard deviations
+            q_std = _safe_std_item(q_weight, model)
+            k_std = _safe_std_item(k_weight, model)
+            v_std = _safe_std_item(v_weight, model)
+            o_std = _safe_std_item(o_proj, model)
+            
+            # Only append if all computations succeeded
+            if all(std is not None for std in [q_std, k_std, v_std, o_std]):
+                W_q_stds.append(q_std)
+                W_k_stds.append(k_std)
+                W_v_stds.append(v_std)
+                W_o_stds.append(o_std)
+            else:
+                logger.warning(f"Failed to compute std for layer {layer_idx}, skipping layer")
         else:
-            logger = logging.getLogger(__name__)
             logger.warning(f"Missing attention weights for layer {layer_idx}")
-            W_q_stds.append(0.0)
-            W_k_stds.append(0.0)
-            W_v_stds.append(0.0)
-            W_o_stds.append(0.0)
     
     return W_q_stds, W_k_stds, W_v_stds, W_o_stds
 
 
-def get_transformer_parameters(model):
+def get_transformer_parameters(model, accelerator=None):
     """
     Extract transformer parameters (W_q, W_k, W_v, W_o) standard deviations from each layer
     and normalize them to have zero mean and unit variance.
@@ -194,7 +352,16 @@ def get_transformer_parameters(model):
     """
     logger = logging.getLogger(__name__)
     
-    # Get model state dict
+    # Remember original device and move model to CPU to avoid meta tensor issues
+    original_device = next(model.parameters()).device if hasattr(model, 'parameters') else None
+    logger.info(f"Original device: {original_device}")
+    
+    # Move model to CPU to ensure we get actual weight values
+    # logger.info("Moving model to CPU to extract weights safely...")
+    model = accelerator.unwrap_model(model)
+    model = model.to('cpu')
+    
+    # Get model state dict after moving to CPU
     state_dict = model.state_dict()
     
     # Detect model architecture
@@ -208,13 +375,16 @@ def get_transformer_parameters(model):
     
     if arch_type == 'llama_style':
         W_q_stds, W_k_stds, W_v_stds, W_o_stds = _extract_llama_style_weights(
-            state_dict, layer_pattern, layer_indices)
+            state_dict, layer_pattern, layer_indices, model)
     elif arch_type == 'gemma':
         W_q_stds, W_k_stds, W_v_stds, W_o_stds = _extract_gemma_weights(
-            state_dict, layer_pattern, layer_indices)
+            state_dict, layer_pattern, layer_indices, model)
+    elif arch_type == 'phi4':
+        W_q_stds, W_k_stds, W_v_stds, W_o_stds = _extract_phi4_weights(
+            state_dict, layer_pattern, layer_indices, model)
     elif arch_type == 'phi':
         W_q_stds, W_k_stds, W_v_stds, W_o_stds = _extract_phi_weights(
-            state_dict, layer_pattern, layer_indices)
+            state_dict, layer_pattern, layer_indices, model)
     else:
         raise ValueError(f"Unsupported architecture: {arch_type}")
     
@@ -240,11 +410,13 @@ def get_transformer_parameters(model):
     So = normalize_tensor(So)
     
     logger.info(f"Extracted parameter distributions: Sq shape {Sq.shape}, Sk shape {Sk.shape}, "
-               f"Sv shape {Sv.shape}, So shape {So.shape}")
+                f"Sv shape {Sv.shape}, So shape {So.shape}")
     
     return Sq, Sk, Sv, So
-
-
+        
+    # finally:
+        # Move model back to original device if possible
+        # model = model.to(accelerator.device) if accelerator else model.to(original_device) if original_device else model
 def get_correlation_coefficient(param1, param2):
     """
     Calculate the Pearson correlation coefficient between two parameter tensors.

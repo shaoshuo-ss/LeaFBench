@@ -6,6 +6,11 @@ from benchmark.model_pool import ModelPool
 from benchmark.base_models import BaseModel
 from benchmark.rag_models import RAGModel
 from benchmark.watermark_models import WatermarkModel
+from benchmark.adversarial_models import InputParaphraseModel, OutputPerturbationModel
+import logging
+import pandas as pd
+import numpy as np
+from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, roc_curve
 import logging
 
 class Benchmark:
@@ -79,6 +84,18 @@ class Benchmark:
                         self._load_sampling_model(
                             sampling_configs, model_family_name, pretrained_model_name, 
                             instruct_model_name, instruct_model_path)
+                    if deploying_techniques.get("input_paraphrase", None) is not None:
+                        # If input paraphrasing is specified, create models with different paraphrasing configurations
+                        input_paraphrase_configs = deploying_techniques["input_paraphrase"]
+                        self._load_input_paraphrase_model(
+                            input_paraphrase_configs, model_family_name, pretrained_model_name, 
+                            instruct_model_name, instruct_model_path, default_generation_params)
+                    if deploying_techniques.get("output_perturbation", None) is not None:
+                        # If output perturbation is specified, create models with different perturbation configurations
+                        output_perturbation_configs = deploying_techniques["output_perturbation"]
+                        self._load_output_perturbation_model(
+                            output_perturbation_configs, model_family_name, pretrained_model_name, 
+                            instruct_model_name, instruct_model_path, default_generation_params)
 
             # load the predeployed models
             predeployed_models = model_family.get("predeployed_models", [])
@@ -119,6 +136,7 @@ class Benchmark:
                 "base_model": pretrained_model_name,
                 "model_name": pretrained_model_name,
                 "model_path": pretrained_model_path,
+                "type": "pretrained",
                 "params": default_generation_params
             }, model_pool=self.modelpool, accelerator=self.accelerator)
         return pretrained_model_name, pretrained_model_path
@@ -142,6 +160,7 @@ class Benchmark:
                 "base_model": instruct_model_name,
                 "model_name": instruct_model_name,
                 "model_path": instruct_model_path,
+                "type": "instruct",
                 "params": default_generation_params
             }, model_pool=self.modelpool, accelerator=self.accelerator)
         return instruct_model_name, instruct_model_path
@@ -160,6 +179,7 @@ class Benchmark:
                 "base_model": instruct_model_name,
                 "model_name": instruct_model_name + f"_with_system_prompt_{i}",
                 "model_path": instruct_model_path,
+                "type": "system_prompt",
                 "params": {**default_generation_params, "system_prompt": system_prompt.get("template", None)}
             }, model_pool=self.modelpool, accelerator=self.accelerator)
 
@@ -175,6 +195,7 @@ class Benchmark:
             rag_config["base_model"] = instruct_model_name
             rag_config["model_name"] = instruct_model_name + "_rag_" + str(i)
             rag_config["params"] = default_generation_params
+            rag_config["type"] = "rag"
             self.models[rag_config["model_name"]] = RAGModel(rag_config, model_pool=self.modelpool, accelerator=self.accelerator)
 
     def _load_watermark_model(self, watermark_configs=None, model_family_name=None, pretrained_model_name=None,
@@ -189,6 +210,7 @@ class Benchmark:
             watermark_config["base_model"] = instruct_model_name
             watermark_config["model_name"] = instruct_model_name + "_watermark_" + str(i)
             watermark_config["params"] = default_generation_params
+            watermark_config["type"] = "watermark"
             self.models[watermark_config["model_name"]] = WatermarkModel(watermark_config, model_pool=self.modelpool, accelerator=self.accelerator)
 
     def _load_cot_model(self, cot_configs=None, model_family_name=None, pretrained_model_name=None,
@@ -201,6 +223,7 @@ class Benchmark:
                 "instruct_model": instruct_model_name,
                 "base_model": instruct_model_name,
                 "model_name": instruct_model_name + f"_with_cot_prompt_{i}",
+                "type": "system_prompt",
                 "model_path": instruct_model_path,
                 "params": {**default_generation_params, "cot_prompt": cot_prompt.get("template", None)}
             }, model_pool=self.modelpool, accelerator=self.accelerator)
@@ -218,7 +241,43 @@ class Benchmark:
                 "base_model": instruct_model_name,
                 "model_name": instruct_model_name + f"_sampling_{i}",
                 "model_path": instruct_model_path,
+                "type": "sampling",
                 "params": sampling_config
+            }, model_pool=self.modelpool, accelerator=self.accelerator)
+    def _load_output_perturbation_model(self, output_perturbation_configs=None, model_family_name=None,
+                                        pretrained_model_name=None, instruct_model_name=None, instruct_model_path=None, default_generation_params=None):
+        """
+        Load a model with output perturbation techniques.
+        """
+        for i, perturbation_config in enumerate(output_perturbation_configs):
+            # Create a new model instance with the output perturbation configuration
+            self.models[instruct_model_name + f"_output_perturbation_{i}"] = OutputPerturbationModel({
+                "model_family": model_family_name,
+                "pretrained_model": pretrained_model_name,
+                "instruct_model": instruct_model_name,
+                "base_model": instruct_model_name,
+                "model_name": instruct_model_name + f"_output_perturbation_{i}",
+                "model_path": instruct_model_path,
+                "type": "output_perturbation",
+                "params": {**default_generation_params, **perturbation_config}
+            }, model_pool=self.modelpool, accelerator=self.accelerator)
+
+    def _load_input_paraphrase_model(self, input_paraphrase_configs=None, model_family_name=None,
+                                     pretrained_model_name=None, instruct_model_name=None, instruct_model_path=None, default_generation_params=None):
+        """
+        Load a model with input paraphrasing techniques.
+        """
+        for i, paraphrase_config in enumerate(input_paraphrase_configs):
+            # Create a new model instance with the input paraphrasing configuration
+            self.models[instruct_model_name + f"_input_paraphrase_{i}"] = InputParaphraseModel({
+                "model_family": model_family_name,
+                "pretrained_model": pretrained_model_name,
+                "instruct_model": instruct_model_name,
+                "base_model": instruct_model_name,
+                "model_name": instruct_model_name + f"_input_paraphrase_{i}",
+                "model_path": instruct_model_path,
+                "type": "input_paraphrase",
+                "params": {**default_generation_params, **paraphrase_config}
             }, model_pool=self.modelpool, accelerator=self.accelerator)
     
     def _load_predeployed_model(self, predeployed_models=None, model_family_name=None,
@@ -244,6 +303,330 @@ class Benchmark:
                     "type": predeployed_model_type,
                     "params": default_generation_params
                 }, model_pool=self.modelpool, accelerator=self.accelerator)
+
+    def evaluate_fingerprinting_method(self, fingerprint_method, save_path):
+        """
+        Evaluate the fingerprinting method by comparing all models with all base models.
+        
+        Args:
+            fingerprint_method: The fingerprint method to use for comparison
+            save_path: Path to save the evaluation results
+            
+        Returns:
+            dict: Evaluation results including metrics for each model family and type
+        """
+        
+        logger = logging.getLogger(__name__)
+        logger.info("Starting fingerprinting method evaluation...")
+        
+        # Get all models and separate base models (pretrained + instruct)
+        all_models = self.get_all_models()
+        
+        # Collect base models (pretrained and instruct models)
+        base_models = {}
+        test_models = {}
+        
+        for model_name, model in all_models.items():
+            if model.type in ['pretrained', 'instruct']:
+                base_models[model_name] = model
+            test_models[model_name] = model
+        
+        logger.info(f"Found {len(base_models)} base models and {len(test_models)} test models")
+        
+        # 1. Create similarity matrix (base models × test models)
+        similarity_matrix = {}
+        labels_matrix = {}  # True labels for classification
+        
+        base_model_names = list(base_models.keys())
+        test_model_names = list(test_models.keys())
+        
+        for base_name in base_model_names:
+            similarity_matrix[base_name] = {}
+            labels_matrix[base_name] = {}
+            
+            for test_name in test_model_names:
+                test_model = test_models[test_name]
+                base_model = base_models[base_name]
+                
+                # Calculate similarity
+                similarity = fingerprint_method.compare_fingerprints(
+                    base_model=base_model, testing_model=test_model
+                )
+                similarity_matrix[base_name][test_name] = similarity
+                
+                # Determine true label (positive if same family, negative otherwise)
+                # For pretrained models: positive if test model's pretrained_model matches base
+                # For instruct models: positive if test model's instruct_model matches base
+                is_positive = False
+                if base_model.type == 'pretrained' and test_model.pretrained_model == base_name:
+                    is_positive = True
+                elif base_model.type == 'instruct' and test_model.instruct_model == base_name:
+                    is_positive = True
+                
+                labels_matrix[base_name][test_name] = 1 if is_positive else 0
+                
+                logger.info(f"Similarity between {base_name} and {test_name}: {similarity:.4f} (label: {labels_matrix[base_name][test_name]})")
+        
+        # Save similarity matrix as CSV
+        similarity_df = pd.DataFrame(similarity_matrix).T
+        similarity_csv_path = os.path.join(save_path, "similarity_matrix.csv")
+        os.makedirs(os.path.dirname(similarity_csv_path), exist_ok=True)
+        similarity_df.to_csv(similarity_csv_path)
+        logger.info(f"Similarity matrix saved to: {similarity_csv_path}")
+        
+        # 2. Calculate metrics by model family
+        family_metrics = self._calculate_metrics_by_group(
+            similarity_matrix, labels_matrix, test_models, 'model_family'
+        )
+        
+        # Save family metrics
+        family_df = self._create_metrics_dataframe(family_metrics)
+        family_csv_path = os.path.join(save_path, "metrics_by_family.csv")
+        family_df.to_csv(family_csv_path)
+        logger.info(f"Family metrics saved to: {family_csv_path}")
+        
+        # 3. Calculate metrics by model type
+        type_metrics = self._calculate_metrics_by_group(
+            similarity_matrix, labels_matrix, test_models, 'type'
+        )
+        
+        # Save type metrics
+        type_df = self._create_metrics_dataframe(type_metrics)
+        type_csv_path = os.path.join(save_path, "metrics_by_type.csv")
+        type_df.to_csv(type_csv_path)
+        logger.info(f"Type metrics saved to: {type_csv_path}")
+        
+        # 4. Calculate overall metrics across all models
+        overall_metrics = self._calculate_overall_metrics(similarity_matrix, labels_matrix)
+        
+        # Save overall metrics
+        overall_df = pd.DataFrame([overall_metrics])
+        overall_csv_path = os.path.join(save_path, "overall_metrics.csv")
+        overall_df.to_csv(overall_csv_path, index=False)
+        logger.info(f"Overall metrics saved to: {overall_csv_path}")
+        logger.info(f"Overall metrics: {overall_metrics}")
+        
+        logger.info("Fingerprinting method evaluation completed!")
+        
+        return {
+            'similarity_matrix': similarity_matrix,
+            'family_metrics': family_metrics,
+            'type_metrics': type_metrics,
+            'overall_metrics': overall_metrics
+        }
+    
+    def _create_metrics_dataframe(self, metrics_dict):
+        """
+        Create a DataFrame from the nested metrics dictionary.
+        
+        Args:
+            metrics_dict: Nested dictionary with structure:
+                         {group_name: {metric_type: {metric: value}}}
+        
+        Returns:
+            pandas.DataFrame: Flattened DataFrame with hierarchical columns
+        """
+        
+        # Flatten the nested dictionary
+        flattened_data = {}
+        
+        for group_name, group_data in metrics_dict.items():
+            for metric_type in ['pretrained_model', 'instruct_model', 'overall']:
+                if metric_type in group_data:
+                    for metric_name, metric_value in group_data[metric_type].items():
+                        column_name = f"{metric_type}_{metric_name}"
+                        if column_name not in flattened_data:
+                            flattened_data[column_name] = {}
+                        flattened_data[column_name][group_name] = metric_value
+        
+        # Create DataFrame
+        df = pd.DataFrame(flattened_data).T
+        
+        return df
+    
+    def _calculate_metrics_by_group(self, similarity_matrix, labels_matrix, test_models, group_by):
+        """
+        Calculate TP, TN, FP, FN, AUC, and accuracy metrics grouped by specified attribute.
+        Separates metrics for pretrained_model, instruct_model, and overall.
+        
+        Args:
+            similarity_matrix: Dictionary of similarities
+            labels_matrix: Dictionary of true labels
+            test_models: Dictionary of test models
+            group_by: Attribute to group by ('model_family' or 'type')
+            
+        Returns:
+            dict: Metrics for each group, separated by base model type
+        """
+        
+        # Group models by the specified attribute
+        groups = {}
+        for model_name, model in test_models.items():
+            group_value = getattr(model, group_by)
+            if group_value not in groups:
+                groups[group_value] = []
+            groups[group_value].append(model_name)
+        
+        metrics = {}
+        
+        for group_name, model_names in groups.items():
+            # Initialize metrics for this group
+            group_metrics = {
+                'pretrained': {'similarities': [], 'labels': []},
+                'instruct': {'similarities': [], 'labels': []},
+                'overall': {'similarities': [], 'labels': []}
+            }
+            
+            # Collect similarities and labels separated by base model type
+            for base_name in similarity_matrix.keys():
+                # Get base model type from the models dictionary
+                base_model = None
+                all_models = self.get_all_models()
+                if base_name in all_models:
+                    base_model = all_models[base_name]
+                    base_model_type = base_model.type
+                else:
+                    continue
+                
+                for model_name in model_names:
+                    if model_name in similarity_matrix[base_name]:
+                        similarity = similarity_matrix[base_name][model_name]
+                        label = labels_matrix[base_name][model_name]
+                        
+                        # Add to overall
+                        group_metrics['overall']['similarities'].append(similarity)
+                        group_metrics['overall']['labels'].append(label)
+                        
+                        # Add to specific base model type
+                        if base_model_type in group_metrics:
+                            group_metrics[base_model_type]['similarities'].append(similarity)
+                            group_metrics[base_model_type]['labels'].append(label)
+            
+            # Calculate metrics for each base model type and overall
+            metrics[group_name] = {}
+            
+            for metric_type in ['pretrained', 'instruct', 'overall']:
+                similarities = np.array(group_metrics[metric_type]['similarities'])
+                labels = np.array(group_metrics[metric_type]['labels'])
+                
+                if len(similarities) == 0:
+                    # No data for this metric type
+                    metrics[group_name][metric_type] = {
+                        'TPR': 0.0, 'TNR': 0.0, 'FPR': 0.0, 'FNR': 0.0,
+                        'AUC': 0.0, 'Accuracy': 0.0, 'Threshold': 0.5,
+                        'Total_Samples': 0
+                    }
+                    continue
+                
+                # Calculate metrics using helper function
+                calculated_metrics = self._calculate_single_metrics(similarities, labels)
+                metrics[group_name][metric_type] = calculated_metrics
+        
+        return metrics
+    
+    def _calculate_single_metrics(self, similarities, labels):
+        """
+        Calculate metrics for a single set of similarities and labels.
+        
+        Args:
+            similarities: Array of similarity scores
+            labels: Array of true labels
+            
+        Returns:
+            dict: Calculated metrics
+        """
+        
+        if len(np.unique(labels)) > 1:  # Need both positive and negative samples
+            # Calculate AUC
+            auc = roc_auc_score(labels, similarities)
+            
+            # Find optimal threshold
+            fpr, tpr, thresholds = roc_curve(labels, similarities)
+            optimal_idx = np.argmax(tpr - fpr)
+            optimal_threshold = thresholds[optimal_idx]
+            
+            # Make predictions using optimal threshold
+            predictions = (similarities >= optimal_threshold).astype(int)
+            
+            # Calculate confusion matrix
+            tn, fp, fn, tp = confusion_matrix(labels, predictions).ravel()
+            
+            # Calculate accuracy
+            accuracy = accuracy_score(labels, predictions)
+            
+            # Calculate rates
+            # TPR (True Positive Rate) = TP / (TP + FN) = Sensitivity = Recall
+            tpr_rate = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            
+            # TNR (True Negative Rate) = TN / (TN + FP) = Specificity
+            tnr_rate = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+            
+            # FPR (False Positive Rate) = FP / (FP + TN) = 1 - TNR
+            fpr_rate = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+            
+            # FNR (False Negative Rate) = FN / (FN + TP) = 1 - TPR
+            fnr_rate = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+            
+        else:
+            # If only one class present, set default values
+            auc = 0.5
+            optimal_threshold = 0.5
+            if len(labels) > 0 and labels[0] == 1:  # All positive
+                tp, fp, tn, fn = len(labels), 0, 0, 0
+                tpr_rate = 1.0  # All true positives
+                tnr_rate = 0.0  # No true negatives
+                fpr_rate = 0.0  # No false positives
+                fnr_rate = 0.0  # No false negatives
+            else:  # All negative or no labels
+                tp, fp, tn, fn = 0, 0, len(labels), 0
+                tpr_rate = 0.0  # No true positives
+                tnr_rate = 1.0 if len(labels) > 0 else 0.0  # All true negatives
+                fpr_rate = 0.0  # No false positives
+                fnr_rate = 0.0  # No false negatives
+            accuracy = 1.0 if len(labels) > 0 else 0.0
+        
+        return {
+            'TPR': float(tpr_rate),
+            'TNR': float(tnr_rate),
+            'FPR': float(fpr_rate),
+            'FNR': float(fnr_rate),
+            'AUC': float(auc),
+            'Accuracy': float(accuracy),
+            'Threshold': float(optimal_threshold),
+            'Total_Samples': len(similarities)
+        }
+
+    def _calculate_overall_metrics(self, similarity_matrix, labels_matrix):
+        """
+        Calculate overall metrics across all model comparisons.
+        
+        Args:
+            similarity_matrix: Dictionary of similarities {base_model: {test_model: similarity}}
+            labels_matrix: Dictionary of true labels {base_model: {test_model: label}}
+            
+        Returns:
+            dict: Overall metrics across all comparisons
+        """
+        
+        # Collect all similarities and labels
+        all_similarities = []
+        all_labels = []
+        
+        for base_name in similarity_matrix.keys():
+            for test_name in similarity_matrix[base_name].keys():
+                similarity = similarity_matrix[base_name][test_name]
+                label = labels_matrix[base_name][test_name]
+                all_similarities.append(similarity)
+                all_labels.append(label)
+        
+        # Convert to numpy arrays
+        similarities = np.array(all_similarities)
+        labels = np.array(all_labels)
+        
+        # Calculate overall metrics using the existing helper function
+        overall_metrics = self._calculate_single_metrics(similarities, labels)
+        
+        return overall_metrics
 
     def get_model_pool(self):
         """

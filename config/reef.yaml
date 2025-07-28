@@ -1,6 +1,5 @@
 # global configuration for all the fingerprinting methods
 fingerprint_method: 'reef'
-use_cache: True
 cached_fingerprints_path: 'cache/reef/reef_fingerprints.pth'
 re_fingerprinting: False
 fingerprint_type: 'white-box'

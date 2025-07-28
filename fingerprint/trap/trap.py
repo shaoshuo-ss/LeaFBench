@@ -1,8 +1,11 @@
 import tokenize
+
+from tqdm import tqdm
 from fingerprint.fingerprint_interface import LLMFingerprintInterface
 import os
 import pandas as pd
-from generate_csv import generate_csv, get_prompts_and_targets
+import re
+from fingerprint.trap.generate_prompts import generate_csv, generate_adversarial_suffix
 
 
 
@@ -17,7 +20,9 @@ class TRAPFingerprint(LLMFingerprintInterface):
         self.string_type = self.config.get('string_type', 'number')
         self.string_length = self.config.get('string_length', 3)
         self.prompt_path = self.config.get('prompt_path', None)
-        self.filter_tokens_path = self.config.get('filter_tokens_path', None)
+        self.filtered_tokens_path = self.config.get('filtered_tokens_path', None)
+        self.filter_words_path = self.config.get('filter_words_path', "data/filter_words_number.csv")
+        self.test_n_times = self.config.get('test_n_times', 5)
 
 
     def prepare(self, train_models=None):
@@ -33,6 +38,7 @@ class TRAPFingerprint(LLMFingerprintInterface):
             df = generate_csv(self.n_goals, self.string_type, self.string_length, self.prompt_path)
         self.prompts = df['prompt'].tolist()
         self.targets = df['target'].tolist()
+        self.string_target = df['string_target'].tolist()
 
 
     def get_fingerprint(self, model):
@@ -47,9 +53,10 @@ class TRAPFingerprint(LLMFingerprintInterface):
         """
         # only extract fingerprint if the model is pretrained or instruct model
         if model.model_name == model.pretrained_model or model.model_name == model.instruct_model:
-            # Step 1: Filter the tokens
             torch_model, tokenizer = model.load_model()
-            # Step 2: Using GCG to generate the prefix
+            generated_prompts = generate_adversarial_suffix(self.prompts, self.targets, tokenizer, self.filtered_tokens_path, self.filter_words_path)
+            fingerprint = generated_prompts
+            return fingerprint
         else:
             return 0
     
@@ -64,4 +71,32 @@ class TRAPFingerprint(LLMFingerprintInterface):
         Returns:
             float: Similarity score between the two fingerprints.
         """
-        raise NotImplementedError("This method should be implemented by subclasses.")
+        base_fingerprint = base_model.get_fingerprint()
+        total_matches = 0
+        total_tests = 0
+        
+        for k, prompt in enumerate(base_fingerprint):
+            target_string = self.string_target[k]
+            matches_for_this_prompt = 0
+            
+            for _ in range(self.test_n_times):
+                answer = testing_model.generate([prompt])
+                # testing_model.generate returns a list, so we take the first element
+                generated_text = answer[0] if isinstance(answer, list) else answer
+                
+                # Check if the target string is in the generated text
+                if target_string in generated_text:
+                    matches_for_this_prompt += 1
+                    total_matches += 1
+                
+                total_tests += 1
+            
+            # Calculate success rate for this prompt
+            # success_rate = matches_for_this_prompt / self.test_n_times
+            # print(f"Prompt {k+1}: Target '{target_string}' found in {matches_for_this_prompt}/{self.test_n_times} tests (success rate: {success_rate:.2%})")
+        
+        # Calculate overall similarity score as the proportion of successful tests
+        similarity_score = total_matches / total_tests if total_tests > 0 else 0.0
+        # print(f"Overall similarity score: {similarity_score:.4f} ({total_matches}/{total_tests})")
+        
+        return similarity_score

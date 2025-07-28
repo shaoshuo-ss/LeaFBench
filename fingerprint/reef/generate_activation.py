@@ -1,10 +1,6 @@
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-import argparse
 import pandas as pd
 from tqdm import tqdm
-
-ACTS_BATCH_SIZE = 400
 
 
 class Hook:
@@ -12,7 +8,7 @@ class Hook:
         self.out = None
 
     def __call__(self, module, module_inputs, module_outputs):
-        self.out = module_outputs 
+        self.out = module_outputs
 
 def load_statements(dataset_path):
     """
@@ -150,8 +146,27 @@ def get_acts(statements, tokenizer, model, model_name, layers, device, token_pos
         
         # Extract activations from each hook for the batch
         for layer_idx, hook in zip(layer_indices, hooks):
-            # hook.out shape: [batch_size, seq_len, hidden_size]
-            batch_acts = hook.out[0][:, token_pos]  # [batch_size, hidden_size]
+            # Handle different output formats (tensor vs tuple/list)
+            if isinstance(hook.out, (tuple, list)):
+                # If output is tuple/list, take the first element (hidden states)
+                hidden_states = hook.out[0]
+            else:
+                # If output is directly a tensor
+                hidden_states = hook.out
+            
+            # Ensure we have a 3D tensor [batch_size, seq_len, hidden_size]
+            if hidden_states.dim() != 3:
+                raise ValueError(f"Expected 3D tensor [batch_size, seq_len, hidden_size], got shape {hidden_states.shape}")
+            
+            # Extract activations at specified token position
+            # hidden_states shape: [batch_size, seq_len, hidden_size]
+            batch_acts = hidden_states[:, token_pos]  # [batch_size, hidden_size]
+            
+            # Ensure we get the expected output shape
+            if batch_acts.dim() != 2:
+                raise ValueError(f"Expected 2D tensor [batch_size, hidden_size], got shape {batch_acts.shape}")
+            
+            # print(f"Layer {layer_idx} activations shape: {batch_acts.shape}")
             acts[layer_idx].extend(batch_acts)
     
     # stack len(statements)'s activations and concatenate all layers
@@ -161,10 +176,7 @@ def get_acts(statements, tokenizer, model, model_name, layers, device, token_pos
         layer_activations.append(stacked_acts)
     
     # concatenate all layer activations into a single tensor
-    if len(layer_activations) == 1:
-        combined_acts = layer_activations[0]
-    else:
-        combined_acts = torch.cat(layer_activations, dim=1)  # [num_statements, hidden_size * num_layers]
+    combined_acts = torch.cat(layer_activations, dim=1)  # [num_statements, hidden_size * num_layers]
     
     # remove hooks
     for handle in handles:

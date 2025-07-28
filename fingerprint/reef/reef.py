@@ -54,6 +54,7 @@ class REEFFingerprint(LLMFingerprintInterface):
         """
         cka = CKA(self.accelerator.device)
         base_fingerprint = base_model.get_fingerprint()
+        print(f"Base fingerprint shape: {base_fingerprint.shape}")
         testing_fingerprint = testing_model.get_fingerprint()
         base_fingerprint = base_fingerprint.to(self.accelerator.device)
         testing_fingerprint = testing_fingerprint.to(self.accelerator.device)

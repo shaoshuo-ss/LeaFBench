@@ -39,9 +39,8 @@ class HuRefFingerprint(LLMFingerprintInterface):
         Returns:
             torch.Tensor: The fingerprint tensor.
         """
-        # Step 1: Get model's state_dict and selected_tokens
+        # Step 1: Get model and selected_tokens
         torch_model, tokenizer = model.load_model()
-        state_dict = torch_model.state_dict()
         
         # Get model name
         model_name = model.pretrained_model
@@ -49,8 +48,8 @@ class HuRefFingerprint(LLMFingerprintInterface):
         # Get sorted tokens
         selected_tokens = self._get_selected_tokens(tokenizer, model_name)
         
-        # Step 2: Get invariant terms using get_invariant_terms function
-        invariant_terms = get_invariant_terms(state_dict, model_name, selected_tokens)
+        # Step 2: Get invariant terms using get_invariant_terms function (now using model object)
+        invariant_terms = get_invariant_terms(torch_model, model_name, selected_tokens, self.accelerator)
         
         # Step 3: Use feature_extractor to get unified feature
         if self.accelerator is not None:

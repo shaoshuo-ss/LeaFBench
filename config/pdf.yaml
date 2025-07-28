@@ -1,8 +1,7 @@
 # global configuration for all the fingerprinting methods
 fingerprint_method: 'pdf'
-use_cache: True
 cached_fingerprints_path: 'cache/pdf/pdf_fingerprints.pth'
-re_fingerprinting: False
+re_fingerprinting: True
 fingerprint_type: 'white-box'
 seed: 42
 
