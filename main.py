@@ -37,7 +37,8 @@ if __name__ == "__main__":
     
     # initialize the benchmark with accelerator
     benchmark = Benchmark(benchmark_config, accelerator=accelerator, 
-                          fingerprint_type=fingerprint_config.get("fingerprint_type", "black-box"))
+                          fingerprint_type=fingerprint_config.get("fingerprint_type", "black-box"),
+                          fingerprint_method=fingerprint_config.get("fingerprint_method", None))
 
     # initialize the fingerprint method with accelerator
     fingerprint_method = create_fingerprint_method(fingerprint_config, accelerator=accelerator)
@@ -148,27 +149,37 @@ if __name__ == "__main__":
         logger.info("Fingerprinting method evaluation completed!")
         
         # Log summary of results
+        if 'overall_metrics' in evaluation_results:
+            logger.info("Overall Metrics:")
+            overall = evaluation_results['overall_metrics']
+            logger.info(f"  Global Threshold: {overall['Threshold']:.4f}")
+            logger.info(f"  AUC: {overall['AUC']:.4f}, Accuracy: {overall['Accuracy']:.4f}")
+            logger.info(f"  TPR: {overall['TPR']:.4f}, TNR: {overall['TNR']:.4f}")
+            logger.info(f"  Total Samples: {overall['Total_Samples']}")
+        
         if 'family_metrics' in evaluation_results:
             logger.info("Model Family Metrics:")
             for family, metrics in evaluation_results['family_metrics'].items():
                 logger.info(f"  {family}:")
-                for metric_type in ['pretrained_model', 'instruct_model', 'overall']:
+                for metric_type in ['pretrained', 'instruct', 'overall']:
                     if metric_type in metrics:
                         auc = metrics[metric_type]['AUC']
                         acc = metrics[metric_type]['Accuracy']
                         samples = metrics[metric_type]['Total_Samples']
-                        logger.info(f"    {metric_type}: AUC={auc:.4f}, Accuracy={acc:.4f}, Samples={samples}")
+                        threshold = metrics[metric_type]['Threshold']
+                        logger.info(f"    {metric_type}: AUC={auc:.4f}, Accuracy={acc:.4f}, Threshold={threshold:.4f}, Samples={samples}")
         
         if 'type_metrics' in evaluation_results:
             logger.info("Model Type Metrics:")
             for type_name, metrics in evaluation_results['type_metrics'].items():
                 logger.info(f"  {type_name}:")
-                for metric_type in ['pretrained_model', 'instruct_model', 'overall']:
+                for metric_type in ['pretrained', 'instruct', 'overall']:
                     if metric_type in metrics:
                         auc = metrics[metric_type]['AUC']
                         acc = metrics[metric_type]['Accuracy']
                         samples = metrics[metric_type]['Total_Samples']
-                        logger.info(f"    {metric_type}: AUC={auc:.4f}, Accuracy={acc:.4f}, Samples={samples}")
+                        threshold = metrics[metric_type]['Threshold']
+                        logger.info(f"    {metric_type}: AUC={auc:.4f}, Accuracy={acc:.4f}, Threshold={threshold:.4f}, Samples={samples}")
     
     # Wait for all processes to complete before exiting
     accelerator.wait_for_everyone()

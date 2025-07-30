@@ -45,6 +45,12 @@ class WatermarkModel(ModelInterface):
             'pad_token_id': tokenizer.pad_token_id,
             'logits_processor': LogitsProcessorList([watermark_processor]),
         }
+        # Special handling for Gemma-2 models to avoid cache device mismatch
+        model_name_lower = model.__class__.__name__.lower()
+        config_name_lower = getattr(model.config, 'model_family', '').lower()
+        if "gemma" in model_name_lower or "gemma" in config_name_lower:
+            # For Gemma models, disable cache to avoid device mismatch issues
+            generation_params['use_cache'] = False
 
         system_prompt = self.params.get('system_prompt', None)
         if system_prompt is not None:

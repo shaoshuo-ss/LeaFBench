@@ -49,8 +49,11 @@ class InferenceModel:
         self.model_path = self.config['inference_model']['inference_model_path']
         if os.path.exists(self.model_path) and not self.config.get("retrain_inference_model", False):
             self.logger.info(f"\tLoading model from {self.model_path}")
-            self.model = torch.load(self.model_path, weights_only=False)
-            
+            checkpoint = torch.load(self.model_path, map_location="cpu", weights_only=False)
+            self.model = InferenceModelLLMmap(config['inference_model'])
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.model.eval()
+
             # Use accelerator to prepare model if available
             if self.accelerator is not None:
                 self.model = self.accelerator.prepare(self.model)
@@ -228,7 +231,9 @@ class InferenceModel:
         else:
             model_to_save = self.model
             
-        torch.save(model_to_save, model_save_path)
+        # Save model state dict in a format compatible with loading
+        checkpoint = {'model_state_dict': model_to_save.state_dict()}
+        torch.save(checkpoint, model_save_path)
         self.logger.info(f"Model saved to {model_save_path}")
         
         # Set model to evaluation mode

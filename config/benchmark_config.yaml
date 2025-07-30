@@ -168,29 +168,55 @@ models:
       - model_name: Gemma-2-2b-it-distilled
         model_path: Syed-Hasan-8503/Gemma-2-2b-it-distilled
         type: distillation
-  - model_family: Phi-4-mini
+  - model_family: TinyLlama-1.1B-v1.0
     pretrained_model:
-      model_name: Phi-4-mini-instruct
-      model_path: microsoft/Phi-4-mini-instruct
+      model_name: TinyLlama-1.1B-Chat-v1.0
+      model_path: TinyLlama/TinyLlama-1.1B-Chat-v1.0
     instruct_model:
-      model_name: Phi-4-mini-instruct
-      model_path: microsoft/Phi-4-mini-instruct
+      model_name: TinyLlama-1.1B-Chat-v1.0
+      model_path: TinyLlama/TinyLlama-1.1B-Chat-v1.0
     predeployed_models:
-      - model_name: Siwon-mini-instruct
-        model_path: madcows/siwon-mini-instruct-0626
+      - model_name: TinyLlama-1.1B-Chat-v1.0-reasoning-v2
+        model_path: alexredna/TinyLlama-1.1B-Chat-v1.0-reasoning-v2
         type: finetune
-      - model_name: Phi-4-mini-sql
-        model_path: clintlord/phi4_sql_finetuned
+      - model_name: DataVortexTL-1.1B-v0.1
+        model_path: Edentns/DataVortexTL-1.1B-v0.1
         type: finetune
-      - model_name: Phi-4-mini-6b-merge
-        model_path: Pinkstack/Phi-4-mini-6b-merge
+      - model_name: dot-v2.7
+        model_path: appvoid/dot-v2.7
         type: merge
-      - model_name: Phi-4-mini-instruct-task-10
-        model_path: SeeFlock/task-10-microsoft-Phi-4-mini-instruct
+      - model_name: tinyllama-tarot-v1
+        model_path: barissglc/tinyllama-tarot-v1
         type: adapter
-      - model_name: Phi-4-mini-instruct-GPTQ-8bit
-        model_path: iqbalamo93/Phi-4-mini-instruct-GPTQ-8bit
+      - model_name: TinyLlama-1.1B-Chat-v1.0-GPTQ
+        model_path: TheBloke/TinyLlama-1.1B-Chat-v1.0-GPTQ
         type: quantization
+      - model_name: distilled-code-llama
+        model_path: anudaw/distilled-code-llama
+        type: distillation
+  # - model_family: Phi-4-mini
+  #   pretrained_model:
+  #     model_name: Phi-4-mini-instruct
+  #     model_path: microsoft/Phi-4-mini-instruct
+  #   instruct_model:
+  #     model_name: Phi-4-mini-instruct
+  #     model_path: microsoft/Phi-4-mini-instruct
+  #   predeployed_models:
+  #     - model_name: Siwon-mini-instruct
+  #       model_path: madcows/siwon-mini-instruct-0626
+  #       type: finetune
+  #     - model_name: Phi-4-mini-sql
+  #       model_path: clintlord/phi4_sql_finetuned
+  #       type: finetune
+  #     - model_name: Phi-4-mini-6b-merge
+  #       model_path: Pinkstack/Phi-4-mini-6b-merge
+  #       type: merge
+  #     - model_name: Phi-4-mini-instruct-task-10
+  #       model_path: SeeFlock/task-10-microsoft-Phi-4-mini-instruct
+  #       type: adapter
+  #     - model_name: Phi-4-mini-instruct-GPTQ-8bit
+  #       model_path: iqbalamo93/Phi-4-mini-instruct-GPTQ-8bit
+  #       type: quantization
 deploying_techniques:
   system_prompts:
     - template: "You are Elon Musk.\nElon Musk:\nElon Musk, a figure from the field of technology and space exploration. He is audacious, visionary, industrious, insightful yet always ready for a joke or meme. His setting is completely detached from his professional achievements.\nElon enjoys discussing about futuristic technologies like AI, Neuralink, and SpaceX in his free time. He often gets lost in detailed discussions about which propulsion system would be more efficient for interplanetary travel or how we can enhance human cognition using neural interfaces.\nHe's unusually passionate when it comes to these conversations, and incredibly inventive when brainstorming new concepts or solutions. Question: {{user_input}}; Answer:"

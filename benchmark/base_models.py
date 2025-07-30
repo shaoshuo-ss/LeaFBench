@@ -59,6 +59,13 @@ class BaseModel(ModelInterface):
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
         # Generate text
+        # Special handling for Gemma-2 models to avoid cache device mismatch
+        model_name_lower = model.__class__.__name__.lower()
+        config_name_lower = getattr(model.config, 'model_family', '').lower()
+        if "gemma" in model_name_lower or "gemma" in config_name_lower:
+            # For Gemma models, disable cache to avoid device mismatch issues
+            generation_params['use_cache'] = False
+        
         # with torch.no_grad():
         outputs = model.generate(
             **inputs,

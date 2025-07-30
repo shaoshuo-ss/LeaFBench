@@ -7,10 +7,11 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, PreTrainedModel
 from peft import AutoPeftModelForCausalLM
 from gptqmodel.nn_modules.qlinear.torch import BaseQuantLinear, TorchQuantLinear
 from gptqmodel import BACKEND, GPTQModel
-from accelerate import disk_offload
+from accelerate import disk_offload, dispatch_model, infer_auto_device_map
+from accelerate.utils import get_balanced_memory
 
 class ModelPool:
-    def __init__(self, accelerator=None, max_loaded_models=1, offload_path=None, fingerprint_type="black-box"):
+    def __init__(self, accelerator=None, max_loaded_models=1, offload_path=None, fingerprint_type="black-box", fingerprint_method=None):
         # self.models = {}  # {model_name: model_instance}
         self.tokenizers = OrderedDict()  # {model_name: tokenizer_instance}
         self.model_paths = OrderedDict()  # {model_name: model_path}
@@ -21,6 +22,7 @@ class ModelPool:
         if self.offload_path:
             os.makedirs(self.offload_path, exist_ok=True)
         self.fingerprint_type = fingerprint_type
+        self.fingerprint_method = fingerprint_method
         self.backend = BACKEND("torch")  # Set backend for gptqmodel
 
     def register_model(self, model_name, model_path):
@@ -83,25 +85,37 @@ class ModelPool:
                     for param in model.parameters():
                         param.requires_grad = True
                 elif type == "quantization":
-                    model = GPTQModel.load(
-                        self.model_paths[model_name], 
-                        device_map="auto", 
-                        torch_dtype=torch.float16, 
-                        backend=self.backend
-                    )
-                    
                     # Only dequantize if needed for white-box fingerprinting
                     if self.fingerprint_type == "white-box":
-                        model = dequantize_model(model)
-                        
-                        # Safety check: Fix any remaining bias weights with incorrect dtype
-                        for name, param in model.named_parameters():
-                            if 'bias' in name and param.dtype == torch.float32:
-                                param.data = param.data.to(torch.float16)
-                                logger.debug(f"Fixed bias parameter {name}: converted to float16")
-                        
-                        # print(model.state_dict().keys())
-                    model = model.to(self.accelerator.device)
+                        model = GPTQModel.load(
+                            self.model_paths[model_name], 
+                            device_map={"": "cpu"},  # Load to single device first
+                            torch_dtype=torch.float16,
+                            backend=self.backend
+                        )
+                        model = dequantize_model(model, torch.float16)
+                        no_split_module_classes = model._no_split_modules
+                        max_memory = get_balanced_memory(
+                            model,
+                            max_memory=None,
+                            no_split_module_classes=no_split_module_classes,
+                            dtype=torch.float16
+                        )
+
+                        device_map = infer_auto_device_map(
+                            model,
+                            max_memory=max_memory,
+                            no_split_module_classes=no_split_module_classes,
+                            dtype=torch.float16
+                        )
+                        model = dispatch_model(model, device_map=device_map)
+                    else:
+                        model = GPTQModel.load(
+                            self.model_paths[model_name], 
+                            device_map="auto", 
+                            torch_dtype=torch.float16,
+                            backend=self.backend
+                        )
                 else:
                     model = AutoModelForCausalLM.from_pretrained(
                         self.model_paths[model_name], 
@@ -227,34 +241,49 @@ class ModelPool:
             except:
                 pass
 
-def dequantize_model(model: PreTrainedModel):
+def dequantize_model(model: PreTrainedModel, dtype: torch.dtype):
+    modules_to_replace = []
+    # First, collect all quantized modules that need to be replaced
     for name, module in model.named_modules():
-        if isinstance(module, BaseQuantLinear) and not isinstance(module, TorchQuantLinear):
-            raise ValueError(
-                "Only models loaded using TorchQuantLinear are supported for dequantization. "
-                "Please load model using backend=BACKEND.TORCH."
-            )
+        if isinstance(module, BaseQuantLinear):
+            if not isinstance(module, TorchQuantLinear):
+                 raise ValueError(
+                    "Only models using TorchQuantLinear are supported for dequantization."
+                    "Please load the model with backend='torch'."
+                )
+            modules_to_replace.append((name, module))
 
-        if isinstance(module, TorchQuantLinear):
-            # Create a new Linear layer with dequantized weights
-            # Check if the original module has bias to determine if new module should have bias
-            has_bias = module.bias is not None and module.bias.numel() > 0
-            new_module = nn.Linear(module.in_features, module.out_features, bias=has_bias)
-            new_module.weight = nn.Parameter(module.dequantize_weight().T.detach().to("cpu", torch.float16))
-            
-            # Only set bias if the original module actually has a meaningful bias
-            if has_bias:
-                new_module.bias = nn.Parameter(module.bias.detach().to("cpu", torch.float16))
+    for name, module in modules_to_replace:
+        # Create a new, non-quantized nn.Linear module
+        # Since the model is on CPU, the new module is also created on CPU
+        device = torch.device("cpu")
+        has_bias = module.bias is not None and module.bias.numel() > 0
 
-            # Replace the module in the model
-            parent = model
-            if '.' in name:
-                parent_name, module_name = name.rsplit('.', 1)
-                parent = dict(model.named_modules())[parent_name]
-            else:
-                module_name = name
+        new_module = nn.Linear(
+            in_features=module.in_features,
+            out_features=module.out_features,
+            bias=has_bias,
+            device=device,
+            dtype=dtype
+        )
 
-            setattr(parent, module_name, new_module)
+        # Dequantize the weights and assign them to the new module
+        # The .T is used depending on the output shape of `dequantize_weight`.
+        # Assume `dequantize_weight` outputs (in, out), after transpose it becomes (out, in), matching nn.Linear.weight shape.
+        dequantized_weight = module.dequantize_weight().T
+        new_module.weight = nn.Parameter(dequantized_weight.detach())
 
-    del model.config.quantization_config
-    return model.model
+        if has_bias:
+            new_module.bias = nn.Parameter(module.bias.detach())
+
+        # Use a more robust way to locate and replace the submodule in the parent module
+        parent_name, module_name = name.rsplit('.', 1) if '.' in name else ('', name)
+        parent = model.get_submodule(parent_name) if parent_name else model
+        setattr(parent, module_name, new_module)
+
+    # Clean up quantization information in the model config
+    if hasattr(model.config, 'quantization_config'):
+        del model.config.quantization_config
+        model.config.is_quantized = False # Add a flag
+
+    return model

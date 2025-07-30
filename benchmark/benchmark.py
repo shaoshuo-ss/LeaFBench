@@ -19,13 +19,13 @@ class Benchmark:
     This class initializes the model pool, loads models, and provides methods to access and run models.
     It also handles the configuration for the benchmark, including model families, pretrained models, and deploying techniques.
     """
-    def __init__(self, config, accelerator=None, fingerprint_type='black-box'):
+    def __init__(self, config, accelerator=None, fingerprint_type='black-box', fingerprint_method=None):
         self.config = config
         self.accelerator = accelerator
         # Initialize the model pool with accelerator.
         # A model pool containing all base models. Any deployed model should use one of the base models in the model pool.
         self.modelpool = ModelPool(accelerator=accelerator, max_loaded_models=config.get("max_loaded_models", 1), 
-                                   offload_path=config.get("offload_path", None), fingerprint_type=fingerprint_type)
+                                   offload_path=config.get("offload_path", None), fingerprint_type=fingerprint_type, fingerprint_method=fingerprint_method)
         self.models = OrderedDict()
         default_generation_params = config.get("default_generation_params", {
             "max_new_tokens": 512,
@@ -374,9 +374,13 @@ class Benchmark:
         similarity_df.to_csv(similarity_csv_path)
         logger.info(f"Similarity matrix saved to: {similarity_csv_path}")
         
-        # 2. Calculate metrics by model family
+        # 2. Calculate global optimal threshold first
+        global_threshold = self._calculate_global_threshold(similarity_matrix, labels_matrix)
+        logger.info(f"Global optimal threshold: {global_threshold:.4f}")
+        
+        # 3. Calculate metrics by model family using global threshold
         family_metrics = self._calculate_metrics_by_group(
-            similarity_matrix, labels_matrix, test_models, 'model_family'
+            similarity_matrix, labels_matrix, test_models, 'model_family', global_threshold
         )
         
         # Save family metrics
@@ -385,9 +389,9 @@ class Benchmark:
         family_df.to_csv(family_csv_path)
         logger.info(f"Family metrics saved to: {family_csv_path}")
         
-        # 3. Calculate metrics by model type
+        # 4. Calculate metrics by model type using global threshold
         type_metrics = self._calculate_metrics_by_group(
-            similarity_matrix, labels_matrix, test_models, 'type'
+            similarity_matrix, labels_matrix, test_models, 'type', global_threshold
         )
         
         # Save type metrics
@@ -396,8 +400,8 @@ class Benchmark:
         type_df.to_csv(type_csv_path)
         logger.info(f"Type metrics saved to: {type_csv_path}")
         
-        # 4. Calculate overall metrics across all models
-        overall_metrics = self._calculate_overall_metrics(similarity_matrix, labels_matrix)
+        # 5. Calculate overall metrics across all models using global threshold
+        overall_metrics = self._calculate_overall_metrics(similarity_matrix, labels_matrix, global_threshold)
         
         # Save overall metrics
         overall_df = pd.DataFrame([overall_metrics])
@@ -444,16 +448,56 @@ class Benchmark:
         
         return df
     
-    def _calculate_metrics_by_group(self, similarity_matrix, labels_matrix, test_models, group_by):
+    def _calculate_global_threshold(self, similarity_matrix, labels_matrix):
+        """
+        Calculate the global optimal threshold using all similarity scores and labels.
+        
+        Args:
+            similarity_matrix: Dictionary of similarities {base_model: {test_model: similarity}}
+            labels_matrix: Dictionary of true labels {base_model: {test_model: label}}
+            
+        Returns:
+            float: Global optimal threshold
+        """
+        
+        # Collect all similarities and labels
+        all_similarities = []
+        all_labels = []
+        
+        for base_name in similarity_matrix.keys():
+            for test_name in similarity_matrix[base_name].keys():
+                similarity = similarity_matrix[base_name][test_name]
+                label = labels_matrix[base_name][test_name]
+                all_similarities.append(similarity)
+                all_labels.append(label)
+        
+        # Convert to numpy arrays
+        similarities = np.array(all_similarities)
+        labels = np.array(all_labels)
+        
+        # Calculate optimal threshold using ROC curve
+        if len(np.unique(labels)) > 1:  # Need both positive and negative samples
+            fpr, tpr, thresholds = roc_curve(labels, similarities)
+            optimal_idx = np.argmax(tpr - fpr)
+            optimal_threshold = thresholds[optimal_idx]
+        else:
+            # If only one class present, use default threshold
+            optimal_threshold = 0.5
+        
+        return optimal_threshold
+    
+    def _calculate_metrics_by_group(self, similarity_matrix, labels_matrix, test_models, group_by, global_threshold):
         """
         Calculate TP, TN, FP, FN, AUC, and accuracy metrics grouped by specified attribute.
         Separates metrics for pretrained_model, instruct_model, and overall.
+        Uses a global threshold for fair comparison across groups.
         
         Args:
             similarity_matrix: Dictionary of similarities
             labels_matrix: Dictionary of true labels
             test_models: Dictionary of test models
             group_by: Attribute to group by ('model_family' or 'type')
+            global_threshold: Global threshold to use for all groups
             
         Returns:
             dict: Metrics for each group, separated by base model type
@@ -513,24 +557,25 @@ class Benchmark:
                     # No data for this metric type
                     metrics[group_name][metric_type] = {
                         'TPR': 0.0, 'TNR': 0.0, 'FPR': 0.0, 'FNR': 0.0,
-                        'AUC': 0.0, 'Accuracy': 0.0, 'Threshold': 0.5,
+                        'AUC': 0.0, 'Accuracy': 0.0, 'Threshold': float(global_threshold),
                         'Total_Samples': 0
                     }
                     continue
                 
-                # Calculate metrics using helper function
-                calculated_metrics = self._calculate_single_metrics(similarities, labels)
+                # Calculate metrics using helper function with global threshold
+                calculated_metrics = self._calculate_single_metrics(similarities, labels, global_threshold)
                 metrics[group_name][metric_type] = calculated_metrics
         
         return metrics
     
-    def _calculate_single_metrics(self, similarities, labels):
+    def _calculate_single_metrics(self, similarities, labels, threshold=None):
         """
         Calculate metrics for a single set of similarities and labels.
         
         Args:
             similarities: Array of similarity scores
             labels: Array of true labels
+            threshold: Threshold to use for predictions. If None, calculates optimal threshold.
             
         Returns:
             dict: Calculated metrics
@@ -540,13 +585,17 @@ class Benchmark:
             # Calculate AUC
             auc = roc_auc_score(labels, similarities)
             
-            # Find optimal threshold
-            fpr, tpr, thresholds = roc_curve(labels, similarities)
-            optimal_idx = np.argmax(tpr - fpr)
-            optimal_threshold = thresholds[optimal_idx]
+            if threshold is None:
+                # Calculate optimal threshold if not provided
+                fpr, tpr, thresholds = roc_curve(labels, similarities)
+                optimal_idx = np.argmax(tpr - fpr)
+                used_threshold = thresholds[optimal_idx]
+            else:
+                # Use the provided threshold
+                used_threshold = threshold
             
-            # Make predictions using optimal threshold
-            predictions = (similarities >= optimal_threshold).astype(int)
+            # Make predictions using the threshold
+            predictions = (similarities >= used_threshold).astype(int)
             
             # Calculate confusion matrix
             tn, fp, fn, tp = confusion_matrix(labels, predictions).ravel()
@@ -570,7 +619,7 @@ class Benchmark:
         else:
             # If only one class present, set default values
             auc = 0.5
-            optimal_threshold = 0.5
+            used_threshold = threshold if threshold is not None else 0.5
             if len(labels) > 0 and labels[0] == 1:  # All positive
                 tp, fp, tn, fn = len(labels), 0, 0, 0
                 tpr_rate = 1.0  # All true positives
@@ -592,17 +641,18 @@ class Benchmark:
             'FNR': float(fnr_rate),
             'AUC': float(auc),
             'Accuracy': float(accuracy),
-            'Threshold': float(optimal_threshold),
+            'Threshold': float(used_threshold),
             'Total_Samples': len(similarities)
         }
 
-    def _calculate_overall_metrics(self, similarity_matrix, labels_matrix):
+    def _calculate_overall_metrics(self, similarity_matrix, labels_matrix, global_threshold):
         """
-        Calculate overall metrics across all model comparisons.
+        Calculate overall metrics across all model comparisons using global threshold.
         
         Args:
             similarity_matrix: Dictionary of similarities {base_model: {test_model: similarity}}
             labels_matrix: Dictionary of true labels {base_model: {test_model: label}}
+            global_threshold: Global threshold to use for predictions
             
         Returns:
             dict: Overall metrics across all comparisons
@@ -623,8 +673,8 @@ class Benchmark:
         similarities = np.array(all_similarities)
         labels = np.array(all_labels)
         
-        # Calculate overall metrics using the existing helper function
-        overall_metrics = self._calculate_single_metrics(similarities, labels)
+        # Calculate overall metrics using the global threshold
+        overall_metrics = self._calculate_single_metrics(similarities, labels, global_threshold)
         
         return overall_metrics
 

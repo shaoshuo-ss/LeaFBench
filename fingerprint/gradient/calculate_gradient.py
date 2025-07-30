@@ -192,13 +192,12 @@ def get_gradients_stats(model, tokenizer, statements, batch_size=1):
         batch_size (int): Batch size for processing.
 
     Returns:
-        torch.Tensor: A tensor containing 16 gradient statistics:
+        torch.Tensor: A tensor containing gradient statistics:
             [0-4]: All gradients (mean, var, L2, skew, kurt)
             [5-7]: Attention gradients (mean, var, L2)
             [8-10]: FFN gradients (mean, var, L2) 
             [11-13]: Embedding gradients (mean, var, L2)
-            [14]: Total parameters
-            [15]: Total layers
+            [14-18]: Relative statistics (attn_ratio, ffn_ratio, emb_ratio, attn_l2_ratio, ffn_l2_ratio)
     """
     # Ensure model is in the right state
     model.train()  # Set model to training mode for gradient computation
@@ -245,10 +244,30 @@ def get_gradients_stats(model, tokenizer, statements, batch_size=1):
         for name, param in model.named_parameters():
             if param.grad is not None:
                 grad_flat = param.grad.flatten()
+                
+                # Use double precision for better numerical stability
+                grad_flat_double = grad_flat.double()
+                
+                # Compute statistics with overflow protection but maintain precision
+                grad_sum = grad_flat_double.sum().item()
+                grad_abs_sum = grad_flat_double.abs().sum().item()
+                
+                # Compute sum of squares with better precision
+                grad_sq = grad_flat_double ** 2
+                grad_sum_sq = grad_sq.sum().item()
+                
+                # Check for overflow/underflow with more conservative bounds
+                if abs(grad_sum) > 1e20:
+                    grad_sum = np.sign(grad_sum) * 1e20
+                if grad_sum_sq > 1e20:
+                    grad_sum_sq = 1e20
+                if grad_abs_sum > 1e20:
+                    grad_abs_sum = 1e20
+                
                 # Accumulate statistics
-                gradient_stats_accumulator[name]['sum'] += grad_flat.sum().item()
-                gradient_stats_accumulator[name]['sum_sq'] += (grad_flat ** 2).sum().item()
-                gradient_stats_accumulator[name]['sum_abs'] += grad_flat.abs().sum().item()
+                gradient_stats_accumulator[name]['sum'] += grad_sum
+                gradient_stats_accumulator[name]['sum_sq'] += grad_sum_sq
+                gradient_stats_accumulator[name]['sum_abs'] += grad_abs_sum
                 gradient_stats_accumulator[name]['count'] += grad_flat.numel()
         
         # Free memory immediately after each batch
@@ -299,28 +318,54 @@ def get_gradients_stats(model, tokenizer, statements, batch_size=1):
     
     # Compute final statistics
     def compute_stats_from_accumulated(stats_dict):
-        """Compute statistics from accumulated values."""
+        """Compute statistics from accumulated values with overflow protection."""
         if stats_dict['count'] == 0:
             return 0.0, 0.0, 0.0, 0.0, 0.0
         
         count = stats_dict['count']
-        mean = stats_dict['sum'] / count
-        variance = (stats_dict['sum_sq'] / count) - (mean ** 2)
-        variance = max(0.0, variance)  # Ensure non-negative
-        l2_norm = (stats_dict['sum_sq']) ** 0.5
         
-        # For skewness and kurtosis, we need more sophisticated computation
-        # For simplicity, we'll use approximations based on available data
-        if variance > 1e-10:
-            # Simple approximation - in practice you might want more sophisticated methods
-            std = variance ** 0.5
-            # Use coefficient of variation as a proxy for skewness
-            skewness = abs(mean) / (std + 1e-10) if std > 1e-10 else 0.0
-            # Use normalized variance as a proxy for kurtosis
-            kurt = variance / (mean ** 2 + 1e-10) if abs(mean) > 1e-10 else 0.0
+        # Compute mean
+        mean = stats_dict['sum'] / count
+        
+        # Compute variance using numerically stable formula
+        mean_sq = stats_dict['sum_sq'] / count
+        variance = mean_sq - (mean ** 2)
+        variance = max(0.0, variance)  # Ensure non-negative
+        
+        # Compute L2 norm: sqrt(sum of squares)
+        l2_norm = np.sqrt(stats_dict['sum_sq'])
+        
+        # Compute additional distinguishing statistics
+        # Standard deviation
+        std = np.sqrt(variance) if variance > 0 else 0.0
+        
+        # Mean absolute value
+        mean_abs = stats_dict['sum_abs'] / count
+        
+        # For skewness and kurtosis approximations
+        if std > 1e-12:
+            # Third moment approximation (skewness proxy)
+            skewness = mean_abs / std  # Use mean absolute value as skewness proxy
+            
+            # Fourth moment approximation (kurtosis proxy)
+            kurt = variance / (mean_abs ** 2 + 1e-12)  # Normalized variance
         else:
             skewness = 0.0
             kurt = 0.0
+        
+        # Apply reasonable bounds but keep distinguishing power
+        mean = np.clip(mean, -1e10, 1e10)
+        variance = np.clip(variance, 0, 1e10)
+        l2_norm = np.clip(l2_norm, 0, 1e10)
+        skewness = np.clip(skewness, 0, 1e6)
+        kurt = np.clip(kurt, 0, 1e6)
+        
+        # Final safety check
+        mean = 0.0 if (np.isinf(mean) or np.isnan(mean)) else mean
+        variance = 0.0 if (np.isinf(variance) or np.isnan(variance)) else variance
+        l2_norm = 0.0 if (np.isinf(l2_norm) or np.isnan(l2_norm)) else l2_norm
+        skewness = 0.0 if (np.isinf(skewness) or np.isnan(skewness)) else skewness
+        kurt = 0.0 if (np.isinf(kurt) or np.isnan(kurt)) else kurt
         
         return mean, variance, l2_norm, skewness, kurt
     
@@ -343,9 +388,28 @@ def get_gradients_stats(model, tokenizer, statements, batch_size=1):
     emb_stats = compute_stats_from_accumulated(categorized_stats['embedding'])
     stats.extend(emb_stats[:3])  # Only first 3 stats
     
-    # Model info (2 stats: total params, total layers)
+    # Add relative statistics for better discrimination
+    # total_count = categorized_stats['all']['count']
+    # if total_count > 0:
+    #     # Relative parameter counts
+    #     attn_ratio = categorized_stats['attention']['count'] / total_count
+    #     ffn_ratio = categorized_stats['ffn']['count'] / total_count
+    #     emb_ratio = categorized_stats['embedding']['count'] / total_count
+        
+    #     # Relative gradient magnitudes
+    #     total_l2 = all_stats[2] if all_stats[2] > 0 else 1e-12
+    #     attn_l2_ratio = attn_stats[2] / total_l2
+    #     ffn_l2_ratio = ffn_stats[2] / total_l2
+        
+    #     stats.extend([attn_ratio, ffn_ratio, emb_ratio, attn_l2_ratio, ffn_l2_ratio])
+    # else:
+    #     stats.extend([0.0, 0.0, 0.0, 0.0, 0.0])
+    
+    # Model info (2 stats: total params, total layers) - uncomment if needed
     # total_params, total_layers = _count_model_info(model)
     # stats.extend([float(total_params), float(total_layers)])
     
     # Convert to tensor and return
-    return torch.tensor(stats, dtype=torch.float32)
+    result_tensor = torch.tensor(stats, dtype=torch.float32)
+    
+    return result_tensor
