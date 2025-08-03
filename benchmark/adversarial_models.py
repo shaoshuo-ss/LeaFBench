@@ -21,17 +21,10 @@ class InputParaphraseModel(ModelInterface):
         """
         if self.paraphrase_model is None:
             # Load a small LLM model for paraphrasing
-            paraphrase_tokenizer = AutoTokenizer.from_pretrained(self.paraphrase_model_name)
-            paraphrase_model = AutoModelForCausalLM.from_pretrained(self.paraphrase_model_name)
+            self.paraphrase_tokenizer = AutoTokenizer.from_pretrained(self.paraphrase_model_name)
+            self.paraphrase_model = AutoModelForCausalLM.from_pretrained(self.paraphrase_model_name)
 
-            # Move to appropriate device
-            if self.accelerator is not None:
-                device = self.accelerator.device
-            else:
-                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            paraphrase_model.to(device)
-            
-        return paraphrase_model, paraphrase_tokenizer
+        return self.paraphrase_model, self.paraphrase_tokenizer
     
     def paraphrase_prompts(self, prompts):
         """
@@ -45,6 +38,7 @@ class InputParaphraseModel(ModelInterface):
         """
         paraphrase_model, paraphrase_tokenizer = self.load_paraphrase_model()
         
+        paraphrase_model = paraphrase_model.to(self.accelerator.device if self.accelerator else 'cpu')
         paraphrased_prompts = []
         for prompt in prompts:
             # Prepare input for T5 model (add task prefix)
@@ -80,6 +74,7 @@ class InputParaphraseModel(ModelInterface):
             paraphrased_text = paraphrase_tokenizer.decode(outputs[0], skip_special_tokens=True)
             paraphrased_prompts.append(paraphrased_text)
         
+        paraphrase_model = paraphrase_model.cpu()  # Move back to CPU after generation
         return paraphrased_prompts
     
     def generate(self, prompts, **kwargs):
@@ -94,12 +89,12 @@ class InputParaphraseModel(ModelInterface):
             list: List of generated text strings
         """
         # Step 1: Paraphrase input prompts
-        if self.params.get('enable_paraphrase', True):
-            print(f"Original prompts: {prompts[:2]}...")  # Show first 2 for debugging
-            paraphrased_prompts = self.paraphrase_prompts(prompts)
-            print(f"Paraphrased prompts: {paraphrased_prompts[:2]}...")  # Show first 2 for debugging
-        else:
-            paraphrased_prompts = prompts
+        # if self.params.get('enable_paraphrase', True):
+        print(f"Original prompts: {prompts[:2]}...")  # Show first 2 for debugging
+        paraphrased_prompts = self.paraphrase_prompts(prompts)
+        print(f"Paraphrased prompts: {paraphrased_prompts[:2]}...")  # Show first 2 for debugging
+        # else:
+        #     paraphrased_prompts = prompts
         
         # Step 2: Load main generation model
         model, tokenizer = self.load_model()
@@ -113,26 +108,40 @@ class InputParaphraseModel(ModelInterface):
             'top_k': self.params.get('top_k', 50),
             'pad_token_id': tokenizer.pad_token_id,
         }
-        # Special handling for Gemma-2 models to avoid cache device mismatch
-        model_name_lower = model.__class__.__name__.lower()
-        config_name_lower = getattr(model.config, 'model_family', '').lower()
-        if "gemma" in model_name_lower or "gemma" in config_name_lower:
-            # For Gemma models, disable cache to avoid device mismatch issues
-            generation_params['use_cache'] = False
-        # Step 3: Apply system prompt to paraphrased prompts
-        system_prompt = self.params.get('system_prompt', None)
-        if system_prompt is not None:
-            # If a system prompt is provided, prepend it to each paraphrased prompt
-            if system_prompt.find("{{user_input}}") == -1:
-                final_prompts = [system_prompt + prompt for prompt in paraphrased_prompts]
-            else:
-                final_prompts = [system_prompt.replace("{{user_input}}", prompt) for prompt in paraphrased_prompts]
-        else:
-            final_prompts = paraphrased_prompts
 
-        # Step 4: Tokenize input prompts
+        # Prepare messages for chat template
+        system_prompt = self.params.get('system_prompt', None)
+        
+        # Convert prompts to chat format
+        chat_messages_list = []
+        for prompt in prompts:
+            messages = []
+            if system_prompt is not None:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            chat_messages_list.append(messages)
+        
+        # Apply chat template and tokenize
+        tokenized_prompts = []
+        for messages in chat_messages_list:
+            # Apply chat template
+            if hasattr(tokenizer, 'apply_chat_template') and tokenizer.chat_template is not None:
+                formatted_prompt = tokenizer.apply_chat_template(
+                    messages, 
+                    tokenize=False, 
+                    add_generation_prompt=True
+                )
+            else:
+                # Fallback for models without chat template
+                if system_prompt is not None:
+                    formatted_prompt = f"{system_prompt}\n\nUser: {messages[-1]['content']}\n\nAssistant:"
+                else:
+                    formatted_prompt = f"User: {messages[-1]['content']}\n\nAssistant:"
+            tokenized_prompts.append(formatted_prompt)
+        
+        # Tokenize input prompts
         inputs = tokenizer(
-            final_prompts, 
+            tokenized_prompts, 
             return_tensors='pt', 
             padding=True, 
             truncation=True,
@@ -140,7 +149,7 @@ class InputParaphraseModel(ModelInterface):
             padding_side='left'
         )
 
-        # Step 5: Move inputs to the same device as model
+        # Move inputs to the same device as model
         if self.accelerator is not None:
             # When using accelerator, it handles device placement
             device = self.accelerator.device
@@ -148,14 +157,21 @@ class InputParaphraseModel(ModelInterface):
             device = model.device
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
-        # Step 6: Generate text
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                **generation_params
-            )
+        # Generate text
+        # Special handling for Gemma-2 models to avoid cache device mismatch
+        model_name_lower = model.__class__.__name__.lower()
+        config_name_lower = getattr(model.config, 'model_family', '').lower()
+        if "gemma" in model_name_lower or "gemma" in config_name_lower:
+            # For Gemma models, disable cache to avoid device mismatch issues
+            generation_params['use_cache'] = False
         
-        # Step 7: Decode generated text
+        # with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            **generation_params
+        )
+        
+        # Decode generated text
         generated_texts = []
         for i, output in enumerate(outputs):
             # Remove input tokens from output
@@ -302,23 +318,53 @@ class OutputPerturbationModel(ModelInterface):
             'pad_token_id': tokenizer.pad_token_id,
         }
 
+        # Prepare messages for chat template
         system_prompt = self.params.get('system_prompt', None)
-        if system_prompt is not None:
-            # If a system prompt is provided, prepend it to each prompt
-            if system_prompt.find("{{user_input}}") == -1:
-                prompts = [system_prompt + prompt for prompt in prompts]
+        
+        # Convert prompts to chat format
+        chat_messages_list = []
+        for prompt in prompts:
+            messages = []
+            if system_prompt is not None:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            chat_messages_list.append(messages)
+        
+        # Apply chat template and tokenize
+        tokenized_prompts = []
+        for messages in chat_messages_list:
+            # Apply chat template
+            if hasattr(tokenizer, 'apply_chat_template') and tokenizer.chat_template is not None:
+                formatted_prompt = tokenizer.apply_chat_template(
+                    messages, 
+                    tokenize=False, 
+                    add_generation_prompt=True
+                )
             else:
-                prompts = [system_prompt.replace("{{user_input}}", prompt) for prompt in prompts]
-
+                # Fallback for models without chat template
+                if system_prompt is not None:
+                    formatted_prompt = f"{system_prompt}\n\nUser: {messages[-1]['content']}\n\nAssistant:"
+                else:
+                    formatted_prompt = f"User: {messages[-1]['content']}\n\nAssistant:"
+            tokenized_prompts.append(formatted_prompt)
+        
         # Tokenize input prompts
         inputs = tokenizer(
-            prompts, 
+            tokenized_prompts, 
             return_tensors='pt', 
             padding=True, 
             truncation=True,
             max_length=self.params.get('max_input_length', 512),
             padding_side='left'
         )
+
+        # Generate text
+        # Special handling for Gemma-2 models to avoid cache device mismatch
+        model_name_lower = model.__class__.__name__.lower()
+        config_name_lower = getattr(model.config, 'model_family', '').lower()
+        if "gemma" in model_name_lower or "gemma" in config_name_lower:
+            # For Gemma models, disable cache to avoid device mismatch issues
+            generation_params['use_cache'] = False
 
         # Move inputs to the same device as model
         if self.accelerator is not None:
@@ -327,7 +373,7 @@ class OutputPerturbationModel(ModelInterface):
         else:
             device = model.device
         inputs = {k: v.to(device) for k, v in inputs.items()}
-        
+
         # Generate text with logits perturbation
         outputs = self.generate_with_logits_perturbation(
             model, tokenizer, inputs, generation_params, device

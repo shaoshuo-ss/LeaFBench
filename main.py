@@ -89,12 +89,11 @@ if __name__ == "__main__":
         raise
     
     # Save the fingerprints to cache (only on main process)
-    if fingerprint_config.get("use_cache", False) and accelerator.is_main_process:
-        if cached_fingerprints_path is not None:
-            save_fingerprints(cached_fingerprints_path, benchmark)
-            logger.info("Fingerprints saved to cache successfully!")
-        else:
-            logger.warning("No cached fingerprints path specified, cannot save fingerprints to cache.")
+    if cached_fingerprints_path is not None:
+        save_fingerprints(cached_fingerprints_path, benchmark)
+        logger.info("Fingerprints saved to cache successfully!")
+    else:
+        logger.warning("No cached fingerprints path specified, cannot save fingerprints to cache.")
     # compare fingerprints of different models using the integrated evaluation method
     if accelerator.is_main_process:
         # logger.info("Comparing fingerprints of models...")
@@ -155,6 +154,10 @@ if __name__ == "__main__":
             logger.info(f"  Global Threshold: {overall['Threshold']:.4f}")
             logger.info(f"  AUC: {overall['AUC']:.4f}, Accuracy: {overall['Accuracy']:.4f}")
             logger.info(f"  TPR: {overall['TPR']:.4f}, TNR: {overall['TNR']:.4f}")
+            logger.info(f"  Mean Difference: {overall['Mean_Diff']:.4f}")
+            logger.info(f"  TPR at 1% FPR: {overall['TPR_at_1_FPR']:.4f}")
+            logger.info(f"  KS Statistic: {overall['KS_Statistic']:.4f}")
+            logger.info(f"  Mahalanobis Distance: {overall['Mahalanobis_Distance']:.4f}")
             logger.info(f"  Total Samples: {overall['Total_Samples']}")
         
         if 'family_metrics' in evaluation_results:
@@ -167,7 +170,11 @@ if __name__ == "__main__":
                         acc = metrics[metric_type]['Accuracy']
                         samples = metrics[metric_type]['Total_Samples']
                         threshold = metrics[metric_type]['Threshold']
-                        logger.info(f"    {metric_type}: AUC={auc:.4f}, Accuracy={acc:.4f}, Threshold={threshold:.4f}, Samples={samples}")
+                        mean_diff = metrics[metric_type]['Mean_Diff']
+                        tpr_at_1_fpr = metrics[metric_type]['TPR_at_1_FPR']
+                        ks_stat = metrics[metric_type]['KS_Statistic']
+                        mahal_dist = metrics[metric_type]['Mahalanobis_Distance']
+                        logger.info(f"    {metric_type}: AUC={auc:.4f}, Accuracy={acc:.4f}, Mean_Diff={mean_diff:.4f}, TPR@1%FPR={tpr_at_1_fpr:.4f}, KS={ks_stat:.4f}, Mahal={mahal_dist:.4f}, Threshold={threshold:.4f}, Samples={samples}")
         
         if 'type_metrics' in evaluation_results:
             logger.info("Model Type Metrics:")
@@ -179,7 +186,28 @@ if __name__ == "__main__":
                         acc = metrics[metric_type]['Accuracy']
                         samples = metrics[metric_type]['Total_Samples']
                         threshold = metrics[metric_type]['Threshold']
-                        logger.info(f"    {metric_type}: AUC={auc:.4f}, Accuracy={acc:.4f}, Threshold={threshold:.4f}, Samples={samples}")
+                        mean_diff = metrics[metric_type]['Mean_Diff']
+                        tpr_at_1_fpr = metrics[metric_type]['TPR_at_1_FPR']
+                        ks_stat = metrics[metric_type]['KS_Statistic']
+                        mahal_dist = metrics[metric_type]['Mahalanobis_Distance']
+                        logger.info(f"    {metric_type}: AUC={auc:.4f}, Accuracy={acc:.4f}, Mean_Diff={mean_diff:.4f}, TPR@1%FPR={tpr_at_1_fpr:.4f}, KS={ks_stat:.4f}, Mahal={mahal_dist:.4f}, Threshold={threshold:.4f}, Samples={samples}")
+        
+        if 'base_model_metrics' in evaluation_results:
+            logger.info("Base Model Metrics (Individual Performance):")
+            for base_model_name, metrics in evaluation_results['base_model_metrics'].items():
+                auc = metrics['AUC']
+                acc = metrics['Accuracy']
+                total_samples = metrics['Total_Samples']
+                pos_samples = metrics['Positive_Samples']
+                neg_samples = metrics['Negative_Samples']
+                threshold = metrics['Threshold']
+                mean_diff = metrics['Mean_Diff']
+                tpr_at_1_fpr = metrics['TPR_at_1_FPR']
+                ks_stat = metrics['KS_Statistic']
+                mahal_dist = metrics['Mahalanobis_Distance']
+                model_type = metrics['Base_Model_Type']
+                model_family = metrics['Model_Family']
+                logger.info(f"  {base_model_name} ({model_family}-{model_type}): AUC={auc:.4f}, Accuracy={acc:.4f}, Mean_Diff={mean_diff:.4f}, TPR@1%FPR={tpr_at_1_fpr:.4f}, KS={ks_stat:.4f}, Mahal={mahal_dist:.4f}, Pos/Neg={pos_samples}/{neg_samples}, Total={total_samples}")
     
     # Wait for all processes to complete before exiting
     accelerator.wait_for_everyone()

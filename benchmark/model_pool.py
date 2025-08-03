@@ -9,6 +9,7 @@ from gptqmodel.nn_modules.qlinear.torch import BaseQuantLinear, TorchQuantLinear
 from gptqmodel import BACKEND, GPTQModel
 from accelerate import disk_offload, dispatch_model, infer_auto_device_map
 from accelerate.utils import get_balanced_memory
+import gc
 
 class ModelPool:
     def __init__(self, accelerator=None, max_loaded_models=1, offload_path=None, fingerprint_type="black-box", fingerprint_method=None):
@@ -142,7 +143,6 @@ class ModelPool:
         """
         Completely unload a model from memory, including GPU and CPU memory.
         """
-        import gc
         
         try:
             # Step 1: Clear all hooks that might keep references
@@ -286,4 +286,4 @@ def dequantize_model(model: PreTrainedModel, dtype: torch.dtype):
         del model.config.quantization_config
         model.config.is_quantized = False # Add a flag
 
-    return model
+    return model.model

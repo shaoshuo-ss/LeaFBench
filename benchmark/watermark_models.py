@@ -43,26 +43,42 @@ class WatermarkModel(ModelInterface):
             'top_p': self.params.get('top_p', 0.9),
             'top_k': self.params.get('top_k', 50),
             'pad_token_id': tokenizer.pad_token_id,
-            'logits_processor': LogitsProcessorList([watermark_processor]),
+            'logits_processor': LogitsProcessorList([watermark_processor])
         }
-        # Special handling for Gemma-2 models to avoid cache device mismatch
-        model_name_lower = model.__class__.__name__.lower()
-        config_name_lower = getattr(model.config, 'model_family', '').lower()
-        if "gemma" in model_name_lower or "gemma" in config_name_lower:
-            # For Gemma models, disable cache to avoid device mismatch issues
-            generation_params['use_cache'] = False
 
+        # Prepare messages for chat template
         system_prompt = self.params.get('system_prompt', None)
-        if system_prompt is not None:
-            # If a system prompt is provided, prepend it to each prompt
-            if system_prompt.find("{{user_input}}") == -1:
-                prompts = [system_prompt + prompt for prompt in prompts]
+        
+        # Convert prompts to chat format
+        chat_messages_list = []
+        for prompt in prompts:
+            messages = []
+            if system_prompt is not None:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            chat_messages_list.append(messages)
+        
+        # Apply chat template and tokenize
+        tokenized_prompts = []
+        for messages in chat_messages_list:
+            # Apply chat template
+            if hasattr(tokenizer, 'apply_chat_template') and tokenizer.chat_template is not None:
+                formatted_prompt = tokenizer.apply_chat_template(
+                    messages, 
+                    tokenize=False, 
+                    add_generation_prompt=True
+                )
             else:
-                prompts = [system_prompt.replace("{{user_input}}", prompt) for prompt in prompts]
-
+                # Fallback for models without chat template
+                if system_prompt is not None:
+                    formatted_prompt = f"{system_prompt}\n\nUser: {messages[-1]['content']}\n\nAssistant:"
+                else:
+                    formatted_prompt = f"User: {messages[-1]['content']}\n\nAssistant:"
+            tokenized_prompts.append(formatted_prompt)
+        
         # Tokenize input prompts
         inputs = tokenizer(
-            prompts, 
+            tokenized_prompts, 
             return_tensors='pt', 
             padding=True, 
             truncation=True,
@@ -79,11 +95,18 @@ class WatermarkModel(ModelInterface):
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
         # Generate text
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                **generation_params
-            )
+        # Special handling for Gemma-2 models to avoid cache device mismatch
+        model_name_lower = model.__class__.__name__.lower()
+        config_name_lower = getattr(model.config, 'model_family', '').lower()
+        if "gemma" in model_name_lower or "gemma" in config_name_lower:
+            # For Gemma models, disable cache to avoid device mismatch issues
+            generation_params['use_cache'] = False
+        
+        # with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            **generation_params
+        )
         
         # Decode generated text
         generated_texts = []

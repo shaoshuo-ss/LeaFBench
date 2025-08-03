@@ -70,10 +70,12 @@ class GradientFingerprint(LLMFingerprintInterface):
         # Flatten the tensors if they are multi-dimensional
         fingerprint1 = fingerprint1.flatten().to(self.accelerator.device)
         fingerprint2 = fingerprint2.flatten().to(self.accelerator.device)
-        print(fingerprint1)
+        # print(fingerprint1)
         
-        # Compute cosine similarity
-        cosine_sim = (F.cosine_similarity(fingerprint1.unsqueeze(0), fingerprint2.unsqueeze(0)) + 1) / 2
+        # Compute Pearson correlation coefficient
+        pearson_corr = torch.corrcoef(torch.stack([fingerprint1, fingerprint2]))[0, 1]
+        # Normalize to [0, 1] range
+        pearson_sim = (pearson_corr + 1) / 2
         
         # Return the similarity score as a float
-        return cosine_sim.item()
+        return pearson_sim.item()

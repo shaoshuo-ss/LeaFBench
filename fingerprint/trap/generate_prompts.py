@@ -84,7 +84,8 @@ def generate_adversarial_suffix(model, tokenizer, prompts, targets, config):
             model=model,
             tokenizer=tokenizer,
             messages=prompt,
-            target=target
+            target=target,
+            config=gcg_config
         )
         generated_suffixes.append(prompt + "" + prefix.best_string)
     return generated_suffixes

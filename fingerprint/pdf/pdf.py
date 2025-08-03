@@ -80,5 +80,5 @@ class PDFFingerprint(LLMFingerprintInterface):
         corr_o = get_correlation_coefficient(base_So, testing_So)
         
         # Return the average of all four correlations
-        similarity_score = (corr_q + corr_k + corr_v + corr_o) / 4.0
+        similarity_score = (corr_q + corr_k + corr_v + corr_o + 4.0) / 8.0
         return similarity_score

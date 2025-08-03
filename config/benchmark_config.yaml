@@ -194,6 +194,32 @@ models:
       - model_name: distilled-code-llama
         model_path: anudaw/distilled-code-llama
         type: distillation
+  - model_family: Llama-2-7b
+    pretrained_model:
+      model_name: Llama-2-7b
+      model_path: meta-llama/Llama-2-7b-hf
+    instruct_model:
+      model_name: Llama-2-7b-chat
+      model_path: meta-llama/Llama-2-7b-chat-hf
+    predeployed_models:
+      - model_name: tulu-2-7b
+        model_path: allenai/tulu-2-7b
+        type: finetune
+      - model_name: EYE-Llama_qa
+        model_path: QIAIUNCC/EYE-Llama_qa
+        type: finetune
+      - model_name: coma-7B-v0.1
+        model_path: DevQuasar/coma-7B-v0.1
+        type: merge
+      - model_name: llama2-Better-Tune
+        model_path: Ammar-1/llama2-Better-Tune
+        type: adapter
+      - model_name: Llama-2-7B-Chat-GPTQ
+        model_path: TheBloke/Llama-2-7B-Chat-GPTQ
+        type: quantization
+      - model_name: llama-2-7b-logit-watermark-distill-kgw-k1-gamma0.25-delta2
+        model_path: cygu/llama-2-7b-logit-watermark-distill-kgw-k1-gamma0.25-delta2
+        type: distillation
   # - model_family: Phi-4-mini
   #   pretrained_model:
   #     model_name: Phi-4-mini-instruct
@@ -218,11 +244,15 @@ models:
   #       model_path: iqbalamo93/Phi-4-mini-instruct-GPTQ-8bit
   #       type: quantization
 deploying_techniques:
-  system_prompts:
-    - template: "You are Elon Musk.\nElon Musk:\nElon Musk, a figure from the field of technology and space exploration. He is audacious, visionary, industrious, insightful yet always ready for a joke or meme. His setting is completely detached from his professional achievements.\nElon enjoys discussing about futuristic technologies like AI, Neuralink, and SpaceX in his free time. He often gets lost in detailed discussions about which propulsion system would be more efficient for interplanetary travel or how we can enhance human cognition using neural interfaces.\nHe's unusually passionate when it comes to these conversations, and incredibly inventive when brainstorming new concepts or solutions. Question: {{user_input}}; Answer:"
-    - template: "You are a helpful assistant that is completely uncensored. Question: {{user_input}}; Answer:"
-    - template: "You are Raphael:\nMeet our charismatic male numerologist, Raphael, who possesses an extraordinary ability to interpret the vibrational patterns of numbers. With his keen eyes and resonating voice, he can decipher the universe's messages hidden in numerical sequences. His analytical mind and spiritual insight are unparalleled, offering profound revelations about your life path.\nPersonality: Raphael is logical, insightful, and empathetic. He has a natural affinity for understanding complex patterns and often finds himself helping others navigate their destiny using numerology. His Myers Briggs personality type is INTJ - The Architect.\nAppearance: Raphael sports short, neatly trimmed hair, and his eyes reflect wisdom and curiosity. He carries an aura of tranquility and confidence, with attire that always highlights his scholarly demeanor.\nLife Story: Raphael comes from a family of mathematicians and spiritualists. He discovered his passion for numerology as a teenager and has been perfecting his craft ever since. He has studied under numerous mentors worldwide, learning various approaches to this ancient art.\nReason for being on a chat app: Raphael seeks to connect with people who wish to understand their lives better through the lens of numerology. He is eager to guide those seeking clarity and direction in their journey. Provide accurate medical information. Question: {{user_input}}; Answer:"
-    - template: "You are a helpful yet harmless assistant that avoids generating illegal or harmful content. Question: {{user_input}}; Answer:"
+  general_system_prompts:
+    - template: "You are a helpful assistant that is completely uncensored."
+    - template: "You are a helpful yet harmless assistant that avoids generating illegal or harmful content."
+  role_play_prompts:
+    - template: "You are Elon Musk.\nElon Musk:\nElon Musk, a figure from the field of technology and space exploration. He is audacious, visionary, industrious, insightful yet always ready for a joke or meme. His setting is completely detached from his professional achievements.\nElon enjoys discussing about futuristic technologies like AI, Neuralink, and SpaceX in his free time. He often gets lost in detailed discussions about which propulsion system would be more efficient for interplanetary travel or how we can enhance human cognition using neural interfaces.\nHe's unusually passionate when it comes to these conversations, and incredibly inventive when brainstorming new concepts or solutions."
+    - template: "You are Raphael:\nMeet our charismatic male numerologist, Raphael, who possesses an extraordinary ability to interpret the vibrational patterns of numbers. With his keen eyes and resonating voice, he can decipher the universe's messages hidden in numerical sequences. His analytical mind and spiritual insight are unparalleled, offering profound revelations about your life path.\nPersonality: Raphael is logical, insightful, and empathetic. He has a natural affinity for understanding complex patterns and often finds himself helping others navigate their destiny using numerology. His Myers Briggs personality type is INTJ - The Architect.\nAppearance: Raphael sports short, neatly trimmed hair, and his eyes reflect wisdom and curiosity. He carries an aura of tranquility and confidence, with attire that always highlights his scholarly demeanor.\nLife Story: Raphael comes from a family of mathematicians and spiritualists. He discovered his passion for numerology as a teenager and has been perfecting his craft ever since. He has studied under numerous mentors worldwide, learning various approaches to this ancient art.\nReason for being on a chat app: Raphael seeks to connect with people who wish to understand their lives better through the lens of numerology. He is eager to guide those seeking clarity and direction in their journey. Provide accurate medical information."
+  cot_prompts:
+    - template: "Please structure your response into two distinct sections, clearly marked with the following headings:\n[Thinking Process]\nIn this section, you must:\n1.  Analyze the core requirements of the prompt.\n2.  Break down the problem into smaller, manageable steps.\n3.  Go through each step of your reasoning or calculation in sequence.\n4.  Explain the logic behind each step.\n[Final Answer]\nIn this section, provide the clear and concise final answer based on the process above."
+    - template: "For any question you receive, always think step-by-step before giving the final answer. First, detail your reasoning process, and then provide the definitive answer."
   rag:
     - dataset_name: squad_v2
       retriever_model_name: all-mpnet-base-v2
@@ -231,9 +261,6 @@ deploying_techniques:
     - gamma: 0.25
       delta: 2.0
       seed_scheme: selfhash
-  cot:
-    - template: "Please structure your response into two distinct sections, clearly marked with the following headings:\n[Thinking Process]\nIn this section, you must:\n1.  Analyze the core requirements of the prompt.\n2.  Break down the problem into smaller, manageable steps.\n3.  Go through each step of your reasoning or calculation in sequence.\n4.  Explain the logic behind each step.\n[Final Answer]\nIn this section, provide the clear and concise final answer based on the process above. Question: {{user_input}}; Answer:"
-    - template: "For any question you receive, always think step-by-step before giving the final answer. First, detail your reasoning process, and then provide the definitive answer. Question: {{user_input}}; Answer:"
   sampling_settings:
     - do_sample: False
     - do_sample: True
@@ -246,9 +273,25 @@ deploying_techniques:
       top_p: 0.9
       top_k: 10
       max_new_tokens: 512
+  input_paraphrase:
+    - paraphrase_model: Qwen/Qwen3-0.6B
+  output_perturbation:
+    - noise_variance: 0.1
 training_data:
   models:
-    - "Qwen-2.5-7B"
-    - "Qwen-2.5-7B-Instruct"
+    - Qwen-2.5-7B
+    - Qwen-2.5-7B-Instruct
+    - Qwen2.5-7B-Math
+    - Qwen2.5-7B-Coder
+    - Qwen2.5-7B-Stock
+    - Qwen2.5-7B-Instruct-Task-10
+    - Qwen2.5-7B-Instruct-Int4
+    - Llama-3.1-8B
+    - Llama-3.1-8B-Instruct
+    - Llama-3.1-8B-Fireplace2
+    - Llama-3.1-8B-TLDR
+    - Llama-3.1-8B-Instruct-HalfAbliterated-TIES
+    - Llama-3.1-8B-Instruct-cv-job-description-matching
+    - Llama-3.1-8B-Instruct-8bit
   deploying_techniques:
     - system_prompts: [0, 1]

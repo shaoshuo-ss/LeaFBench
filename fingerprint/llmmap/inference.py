@@ -11,20 +11,6 @@ from accelerate import cpu_offload
 from .utility import read_pickle
 from .embedding_model import Embedding
 from .inference_model_archs import InferenceModelLLMmap
-
-MAX_ANSWER_CHARS = 650
-
-# def load_model(path, verbose=True):
-#     logs_path = os.path.join(path, 'logs.pickle')
-#     logs = read_pickle(logs_path)
-#     if logs['is_open']:
-#         if verbose:
-#             print("## Using open-set model ##\n")
-#         return InferenceModel_open(path, verbose=True)
-#     else:
-#         if verbose:
-#             print("## Using closed-set model ##\n")
-#         return InferenceModel_closed(path, verbose=True)
     
 
 class InferenceModel:
@@ -109,7 +95,7 @@ class InferenceModel:
         return traces_tensor
         
     def _preprocess_answers(self, out):
-        return out[:MAX_ANSWER_CHARS]
+        return out[:self.config.get('max_answer_chars', 650)]
     
     def train_inference_model(self, train_models):
         """

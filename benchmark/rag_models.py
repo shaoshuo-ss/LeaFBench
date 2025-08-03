@@ -74,6 +74,9 @@ class RAGModel(ModelInterface):
         if "gemma" in model_name_lower or "gemma" in config_name_lower:
             # For Gemma models, disable cache to avoid device mismatch issues
             generation_params['use_cache'] = False
+        # Get system prompt if specified
+        system_prompt = self.params.get('system_prompt', None)
+        
         for prompt in prompts:
             # Retrieve relevant documents
             question_embedding = self.retriever_model.encode([prompt], convert_to_tensor=True)
@@ -82,7 +85,27 @@ class RAGModel(ModelInterface):
 
             # Prepare the prompt with retrieved contexts
             combined_context = "\n---\n".join(retrieved_contexts)
-            full_prompt = f"Context:\n{combined_context}\n\nQuestion: {prompt}\n\nAnswer:"
+            user_content = f"Context:\n{combined_context}\n\nQuestion: {prompt}"
+            
+            # Prepare messages for chat template
+            messages = []
+            if system_prompt is not None:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": user_content})
+            
+            # Apply chat template
+            if hasattr(tokenizer, 'apply_chat_template') and tokenizer.chat_template is not None:
+                full_prompt = tokenizer.apply_chat_template(
+                    messages, 
+                    tokenize=False, 
+                    add_generation_prompt=True
+                )
+            else:
+                # Fallback for models without chat template
+                if system_prompt is not None:
+                    full_prompt = f"{system_prompt}\n\n{user_content}\n\nAnswer:"
+                else:
+                    full_prompt = f"{user_content}\n\nAnswer:"
 
             # Tokenize input prompt
             inputs = tokenizer(

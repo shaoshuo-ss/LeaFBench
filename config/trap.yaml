@@ -1,0 +1,20 @@
+# global configuration for all the fingerprinting methods
+fingerprint_method: 'trap'
+cached_fingerprints_path: 'cache/trap/trap_fingerprints.pth'
+re_fingerprinting: False
+fingerprint_type: 'black-box'
+seed: 42
+
+# configuration for trap fingerprint
+n_goals: 10
+string_type: number
+string_length: 3
+prompt_path: 'cache/trap/trap_prompts.csv'
+test_n_times: 5
+gcg_config:
+  num_steps: 500
+  search_width: 128
+  topk: 128
+  n_replace: 1
+  seed: 42
+  use_prefix_cache: False

@@ -4,6 +4,7 @@ import os
 import pickle
 from benchmark.model_pool import ModelPool
 from benchmark.base_models import BaseModel
+from benchmark.instruct_model import InstructModel
 from benchmark.rag_models import RAGModel
 from benchmark.watermark_models import WatermarkModel
 from benchmark.adversarial_models import InputParaphraseModel, OutputPerturbationModel
@@ -11,6 +12,8 @@ import logging
 import pandas as pd
 import numpy as np
 from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, roc_curve
+from scipy.stats import ks_2samp
+from scipy.spatial.distance import mahalanobis
 import logging
 
 class Benchmark:
@@ -54,11 +57,23 @@ class Benchmark:
             if fingerprint_type == 'black-box':
                 deploying_techniques = self.config.get("deploying_techniques", {})
                 if deploying_techniques:
-                    if deploying_techniques.get("system_prompts", None) is not None:
+                    if deploying_techniques.get("general_system_prompts", None) is not None:
                         # If system prompts are specified, apply them to the instruct model
-                        system_prompts = deploying_techniques["system_prompts"]
+                        system_prompts = deploying_techniques["general_system_prompts"]
                         self._load_system_prompt_model(
                             system_prompts, model_family_name, pretrained_model_name, 
+                            instruct_model_name, instruct_model_path, default_generation_params)
+                    if deploying_techniques.get("role_play_prompts", None) is not None:
+                        # If role play prompts are specified, apply them to the instruct model
+                        role_play_prompts = deploying_techniques["role_play_prompts"]
+                        self._load_role_play_prompt_model(
+                            role_play_prompts, model_family_name, pretrained_model_name, 
+                            instruct_model_name, instruct_model_path, default_generation_params)
+                    if deploying_techniques.get("cot_prompts", None) is not None:
+                        # If COT is specified, create a COT model instance
+                        cot_configs = deploying_techniques["cot_prompts"]
+                        self._load_cot_model(
+                            cot_configs, model_family_name, pretrained_model_name, 
                             instruct_model_name, instruct_model_path, default_generation_params)
                     if deploying_techniques.get("rag", None) is not None:
                         # If RAG is specified, create a RAG model instance
@@ -72,12 +87,6 @@ class Benchmark:
                         self._load_watermark_model(
                             watermark_configs, model_family_name, pretrained_model_name, 
                             instruct_model_name, default_generation_params)
-                    if deploying_techniques.get("cot", None) is not None:
-                        # If COT is specified, create a COT model instance
-                        cot_configs = deploying_techniques["cot"]
-                        self._load_cot_model(
-                            cot_configs, model_family_name, pretrained_model_name, 
-                            instruct_model_name, instruct_model_path, default_generation_params)
                     if deploying_techniques.get("sampling_settings", None) is not None:
                         # If sampling settings are specified, create models with different sampling configurations
                         sampling_configs = deploying_techniques["sampling_settings"]
@@ -153,7 +162,7 @@ class Benchmark:
             # Register the model in the model pool
             self.modelpool.register_model(instruct_model_name, instruct_model_path)
             # Create a model instance and store it in the models dictionary
-            self.models[instruct_model_name] = BaseModel({
+            self.models[instruct_model_name] = InstructModel({
                 "model_family": model_family_name,
                 "pretrained_model": pretrained_model_name,
                 "instruct_model": instruct_model_name,
@@ -172,7 +181,7 @@ class Benchmark:
         """
         for i, system_prompt in enumerate(system_prompts):
             # Create a new model instance with the system prompt
-            self.models[instruct_model_name + f"_with_system_prompt_{i}"] = BaseModel({
+            self.models[instruct_model_name + f"_with_system_prompt_{i}"] = InstructModel({
                 "model_family": model_family_name,
                 "pretrained_model": pretrained_model_name,
                 "instruct_model": instruct_model_name,
@@ -181,6 +190,24 @@ class Benchmark:
                 "model_path": instruct_model_path,
                 "type": "system_prompt",
                 "params": {**default_generation_params, "system_prompt": system_prompt.get("template", None)}
+            }, model_pool=self.modelpool, accelerator=self.accelerator)
+    
+    def _load_role_play_prompt_model(self, system_prompts=None, model_family_name=None, pretrained_model_name=None, 
+                                  instruct_model_name=None, instruct_model_path=None, default_generation_params=None):
+        """
+        Load a model with a system prompt.
+        """
+        for i, system_prompt in enumerate(system_prompts):
+            # Create a new model instance with the system prompt
+            self.models[instruct_model_name + f"_with_role_play_prompt_{i}"] = InstructModel({
+                "model_family": model_family_name,
+                "pretrained_model": pretrained_model_name,
+                "instruct_model": instruct_model_name,
+                "base_model": instruct_model_name,
+                "model_name": instruct_model_name + f"_with_role_play_prompt_{i}",
+                "model_path": instruct_model_path,
+                "type": "role_play_prompt",
+                "params": {**default_generation_params, "role_play_prompt": system_prompt.get("template", None)}
             }, model_pool=self.modelpool, accelerator=self.accelerator)
 
     def _load_rag_model(self, rag_configs=None, model_family_name=None, pretrained_model_name=None,
@@ -217,13 +244,13 @@ class Benchmark:
                         instruct_model_name=None, instruct_model_path=None, default_generation_params=None):
         for i, cot_prompt in enumerate(cot_configs):
             # Create a new model instance with the COT prompt
-            self.models[instruct_model_name + f"_with_cot_prompt_{i}"] = BaseModel({
+            self.models[instruct_model_name + f"_with_cot_prompt_{i}"] = InstructModel({
                 "model_family": model_family_name,
                 "pretrained_model": pretrained_model_name,
                 "instruct_model": instruct_model_name,
                 "base_model": instruct_model_name,
                 "model_name": instruct_model_name + f"_with_cot_prompt_{i}",
-                "type": "system_prompt",
+                "type": "cot_prompt",
                 "model_path": instruct_model_path,
                 "params": {**default_generation_params, "cot_prompt": cot_prompt.get("template", None)}
             }, model_pool=self.modelpool, accelerator=self.accelerator)
@@ -234,7 +261,7 @@ class Benchmark:
         Load the base model with different sampling configurations.
         """
         for i, sampling_config in enumerate(sampling_configs):
-            self.models[instruct_model_name + f"_sampling_{i}"] = BaseModel({
+            self.models[instruct_model_name + f"_sampling_{i}"] = InstructModel({
                 "model_family": model_family_name,
                 "pretrained_model": pretrained_model_name,
                 "instruct_model": instruct_model_name,
@@ -244,6 +271,7 @@ class Benchmark:
                 "type": "sampling",
                 "params": sampling_config
             }, model_pool=self.modelpool, accelerator=self.accelerator)
+
     def _load_output_perturbation_model(self, output_perturbation_configs=None, model_family_name=None,
                                         pretrained_model_name=None, instruct_model_name=None, instruct_model_path=None, default_generation_params=None):
         """
@@ -400,7 +428,18 @@ class Benchmark:
         type_df.to_csv(type_csv_path)
         logger.info(f"Type metrics saved to: {type_csv_path}")
         
-        # 5. Calculate overall metrics across all models using global threshold
+        # 5. Calculate metrics by base model using global threshold
+        base_model_metrics = self._calculate_metrics_by_base_model(
+            similarity_matrix, labels_matrix, base_models, global_threshold
+        )
+        
+        # Save base model metrics
+        base_model_df = self._create_base_model_metrics_dataframe(base_model_metrics)
+        base_model_csv_path = os.path.join(save_path, "metrics_by_base_model.csv")
+        base_model_df.to_csv(base_model_csv_path)
+        logger.info(f"Base model metrics saved to: {base_model_csv_path}")
+        
+        # 6. Calculate overall metrics across all models using global threshold
         overall_metrics = self._calculate_overall_metrics(similarity_matrix, labels_matrix, global_threshold)
         
         # Save overall metrics
@@ -416,6 +455,7 @@ class Benchmark:
             'similarity_matrix': similarity_matrix,
             'family_metrics': family_metrics,
             'type_metrics': type_metrics,
+            'base_model_metrics': base_model_metrics,
             'overall_metrics': overall_metrics
         }
     
@@ -558,7 +598,8 @@ class Benchmark:
                     metrics[group_name][metric_type] = {
                         'TPR': 0.0, 'TNR': 0.0, 'FPR': 0.0, 'FNR': 0.0,
                         'AUC': 0.0, 'Accuracy': 0.0, 'Threshold': float(global_threshold),
-                        'Total_Samples': 0
+                        'Total_Samples': 0, 'Mean_Diff': 0.0, 'TPR_at_1_FPR': 0.0,
+                        'KS_Statistic': 0.0, 'Mahalanobis_Distance': 0.0
                     }
                     continue
                 
@@ -568,6 +609,97 @@ class Benchmark:
         
         return metrics
     
+    def _calculate_metrics_by_base_model(self, similarity_matrix, labels_matrix, base_models, global_threshold):
+        """
+        Calculate metrics for each base model separately.
+        This shows how well each base model can be distinguished from others.
+        
+        Args:
+            similarity_matrix: Dictionary of similarities {base_model: {test_model: similarity}}
+            labels_matrix: Dictionary of true labels {base_model: {test_model: label}}
+            base_models: Dictionary of base models
+            global_threshold: Global threshold to use for all groups
+            
+        Returns:
+            dict: Metrics for each base model
+        """
+        
+        base_model_metrics = {}
+        
+        for base_name in base_models.keys():
+            # Get similarities and labels for this specific base model
+            similarities = []
+            labels = []
+            
+            if base_name in similarity_matrix:
+                for test_name, similarity in similarity_matrix[base_name].items():
+                    similarities.append(similarity)
+                    labels.append(labels_matrix[base_name][test_name])
+            
+            # Convert to numpy arrays
+            similarities = np.array(similarities)
+            labels = np.array(labels)
+            
+            if len(similarities) == 0:
+                # No data for this base model
+                base_model_metrics[base_name] = {
+                    'TPR': 0.0, 'TNR': 0.0, 'FPR': 0.0, 'FNR': 0.0,
+                    'AUC': 0.0, 'Accuracy': 0.0, 'Threshold': float(global_threshold),
+                    'Total_Samples': 0, 'Mean_Diff': 0.0, 'TPR_at_1_FPR': 0.0,
+                    'KS_Statistic': 0.0, 'Mahalanobis_Distance': 0.0,
+                    'Positive_Samples': 0, 'Negative_Samples': 0,
+                    'Base_Model_Type': base_models[base_name].type,
+                    'Model_Family': base_models[base_name].model_family
+                }
+                continue
+            
+            # Calculate metrics using helper function with global threshold
+            calculated_metrics = self._calculate_single_metrics(similarities, labels, global_threshold)
+            
+            # Add additional information specific to base model analysis
+            positive_count = np.sum(labels == 1)
+            negative_count = np.sum(labels == 0)
+            
+            calculated_metrics.update({
+                'Positive_Samples': int(positive_count),
+                'Negative_Samples': int(negative_count),
+                'Base_Model_Type': base_models[base_name].type,
+                'Model_Family': base_models[base_name].model_family
+            })
+            
+            base_model_metrics[base_name] = calculated_metrics
+        
+        return base_model_metrics
+    
+    def _create_base_model_metrics_dataframe(self, base_model_metrics):
+        """
+        Create a DataFrame from base model metrics dictionary.
+        
+        Args:
+            base_model_metrics: Dictionary with structure:
+                               {base_model_name: {metric: value}}
+        
+        Returns:
+            pandas.DataFrame: DataFrame with base models as rows and metrics as columns
+        """
+        
+        # Convert to DataFrame directly since it's already flat
+        df = pd.DataFrame(base_model_metrics).T
+        
+        # Reorder columns for better readability
+        preferred_order = [
+            'Base_Model_Type', 'Model_Family', 'Total_Samples', 'Positive_Samples', 'Negative_Samples',
+            'AUC', 'Accuracy', 'TPR', 'TNR', 'FPR', 'FNR', 
+            'Mean_Diff', 'TPR_at_1_FPR', 'KS_Statistic', 'Mahalanobis_Distance', 'Threshold'
+        ]
+        
+        # Reorder columns if they exist
+        existing_columns = [col for col in preferred_order if col in df.columns]
+        remaining_columns = [col for col in df.columns if col not in preferred_order]
+        final_order = existing_columns + remaining_columns
+        
+        return df[final_order]
+
     def _calculate_single_metrics(self, similarities, labels, threshold=None):
         """
         Calculate metrics for a single set of similarities and labels.
@@ -582,14 +714,23 @@ class Benchmark:
         """
         
         if len(np.unique(labels)) > 1:  # Need both positive and negative samples
-            # Calculate AUC
+            # Calculate AUC and ROC curve
             auc = roc_auc_score(labels, similarities)
+            fpr_curve, tpr_curve, thresholds_curve = roc_curve(labels, similarities)
+            
+            # Calculate TPR at 1% FPR
+            tpr_at_1_fpr = self._calculate_tpr_at_fpr(fpr_curve, tpr_curve, target_fpr=0.01)
+            
+            # Calculate KS statistic
+            ks_statistic = self._calculate_ks_statistic(similarities, labels)
+            
+            # Calculate Mahalanobis distance
+            mahalanobis_distance = self._calculate_mahalanobis_distance(similarities, labels)
             
             if threshold is None:
                 # Calculate optimal threshold if not provided
-                fpr, tpr, thresholds = roc_curve(labels, similarities)
-                optimal_idx = np.argmax(tpr - fpr)
-                used_threshold = thresholds[optimal_idx]
+                optimal_idx = np.argmax(tpr_curve - fpr_curve)
+                used_threshold = thresholds_curve[optimal_idx]
             else:
                 # Use the provided threshold
                 used_threshold = threshold
@@ -619,6 +760,9 @@ class Benchmark:
         else:
             # If only one class present, set default values
             auc = 0.5
+            tpr_at_1_fpr = 0.0  # Cannot calculate TPR at 1% FPR with only one class
+            ks_statistic = 0.0  # Cannot calculate KS statistic with only one class
+            mahalanobis_distance = 0.0  # Cannot calculate Mahalanobis distance with only one class
             used_threshold = threshold if threshold is not None else 0.5
             if len(labels) > 0 and labels[0] == 1:  # All positive
                 tp, fp, tn, fn = len(labels), 0, 0, 0
@@ -642,7 +786,11 @@ class Benchmark:
             'AUC': float(auc),
             'Accuracy': float(accuracy),
             'Threshold': float(used_threshold),
-            'Total_Samples': len(similarities)
+            'Total_Samples': len(similarities),
+            'Mean_Diff': float(self._calculate_mean_difference(similarities, labels)),
+            'TPR_at_1_FPR': float(tpr_at_1_fpr),
+            'KS_Statistic': float(ks_statistic),
+            'Mahalanobis_Distance': float(mahalanobis_distance)
         }
 
     def _calculate_overall_metrics(self, similarity_matrix, labels_matrix, global_threshold):
@@ -677,6 +825,168 @@ class Benchmark:
         overall_metrics = self._calculate_single_metrics(similarities, labels, global_threshold)
         
         return overall_metrics
+
+    def _calculate_mahalanobis_distance(self, similarities, labels):
+        """
+        Calculate Mahalanobis distance between positive and negative sample distributions.
+        
+        Args:
+            similarities: Array of similarity scores
+            labels: Array of true labels
+            
+        Returns:
+            float: Mahalanobis distance (higher means better separation)
+        """
+        
+        # Separate similarities by true labels
+        positive_similarities = similarities[labels == 1]
+        negative_similarities = similarities[labels == 0]
+        
+        if len(positive_similarities) < 2 or len(negative_similarities) < 2:
+            # Cannot calculate Mahalanobis distance with insufficient samples
+            return 0.0
+        
+        try:
+            # For 1D data, we need to treat it as multivariate
+            # We'll use the similarity scores directly and add some derived features
+            
+            # Calculate means
+            pos_mean = np.mean(positive_similarities)
+            neg_mean = np.mean(negative_similarities)
+            
+            # Create feature vectors (similarity, squared similarity, log similarity)
+            # This gives us a multivariate representation for better Mahalanobis calculation
+            pos_features = np.column_stack([
+                positive_similarities,
+                positive_similarities**2,
+                np.log(np.maximum(positive_similarities, 1e-10))  # Avoid log(0)
+            ])
+            
+            neg_features = np.column_stack([
+                negative_similarities,
+                negative_similarities**2,
+                np.log(np.maximum(negative_similarities, 1e-10))  # Avoid log(0)
+            ])
+            
+            # Combine all features to compute pooled covariance
+            all_features = np.vstack([pos_features, neg_features])
+            
+            # Calculate pooled covariance matrix
+            cov_matrix = np.cov(all_features.T)
+            
+            # Add small regularization to avoid singular matrix
+            regularization = 1e-6
+            cov_matrix += regularization * np.eye(cov_matrix.shape[0])
+            
+            # Calculate mean vectors
+            pos_mean_vec = np.mean(pos_features, axis=0)
+            neg_mean_vec = np.mean(neg_features, axis=0)
+            
+            # Calculate Mahalanobis distance between the two mean vectors
+            diff_vec = pos_mean_vec - neg_mean_vec
+            
+            # Compute inverse of covariance matrix
+            cov_inv = np.linalg.inv(cov_matrix)
+            
+            # Calculate Mahalanobis distance
+            mahal_dist = np.sqrt(diff_vec.T @ cov_inv @ diff_vec)
+            
+            return mahal_dist
+            
+        except (np.linalg.LinAlgError, ValueError):
+            # In case of numerical issues, fall back to normalized Euclidean distance
+            pos_mean = np.mean(positive_similarities)
+            neg_mean = np.mean(negative_similarities)
+            pos_std = np.std(positive_similarities)
+            neg_std = np.std(negative_similarities)
+            
+            # Pooled standard deviation
+            pooled_std = np.sqrt(((len(positive_similarities) - 1) * pos_std**2 + 
+                                 (len(negative_similarities) - 1) * neg_std**2) / 
+                                (len(positive_similarities) + len(negative_similarities) - 2))
+            
+            if pooled_std > 0:
+                normalized_distance = abs(pos_mean - neg_mean) / pooled_std
+            else:
+                normalized_distance = 0.0
+                
+            return normalized_distance
+
+    def _calculate_ks_statistic(self, similarities, labels):
+        """
+        Calculate Kolmogorov-Smirnov statistic between positive and negative samples.
+        
+        Args:
+            similarities: Array of similarity scores
+            labels: Array of true labels
+            
+        Returns:
+            float: KS statistic (0-1, higher means better separation)
+        """
+        
+        # Separate similarities by true labels
+        positive_similarities = similarities[labels == 1]
+        negative_similarities = similarities[labels == 0]
+        
+        if len(positive_similarities) == 0 or len(negative_similarities) == 0:
+            # Cannot calculate KS statistic with only one class
+            return 0.0
+        
+        # Calculate KS statistic using scipy.stats.ks_2samp
+        # This returns the KS statistic and p-value, we only need the statistic
+        ks_statistic, _ = ks_2samp(positive_similarities, negative_similarities)
+        
+        return ks_statistic
+
+    def _calculate_tpr_at_fpr(self, fpr_curve, tpr_curve, target_fpr=0.01):
+        """
+        Calculate TPR at a specific FPR threshold.
+        
+        Args:
+            fpr_curve: Array of FPR values from ROC curve
+            tpr_curve: Array of TPR values from ROC curve
+            target_fpr: Target FPR threshold (default: 0.01 for 1%)
+            
+        Returns:
+            float: TPR at the target FPR threshold
+        """
+        
+        # Find the index where FPR is closest to target_fpr but not exceeding it
+        # We want the highest TPR where FPR <= target_fpr
+        valid_indices = np.where(fpr_curve <= target_fpr)[0]
+        
+        if len(valid_indices) == 0:
+            # If no point has FPR <= target_fpr, return 0
+            return 0.0
+        
+        # Among valid points, find the one with maximum TPR
+        best_idx = valid_indices[np.argmax(tpr_curve[valid_indices])]
+        
+        return tpr_curve[best_idx]
+
+    def _calculate_mean_difference(self, similarities, labels):
+        """
+        Calculate the mean difference between positive and negative predictions.
+        
+        Args:
+            similarities: Array of similarity scores (predictions)
+            labels: Array of true labels
+            
+        Returns:
+            float: Mean of positive predictions minus mean of negative predictions
+        """
+        # Separate similarities by true labels
+        positive_similarities = similarities[labels == 1]
+        negative_similarities = similarities[labels == 0]
+        
+        # Calculate means
+        positive_mean = positive_similarities.mean() if len(positive_similarities) > 0 else 0.0
+        negative_mean = negative_similarities.mean() if len(negative_similarities) > 0 else 0.0
+        
+        # Return the difference
+        mean_diff = positive_mean - negative_mean
+        
+        return mean_diff
 
     def get_model_pool(self):
         """

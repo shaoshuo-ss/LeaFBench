@@ -20,8 +20,9 @@ class TRAPFingerprint(LLMFingerprintInterface):
         self.string_type = self.config.get('string_type', 'number')
         self.string_length = self.config.get('string_length', 3)
         self.prompt_path = self.config.get('prompt_path', None)
-        self.filtered_tokens_path = self.config.get('filtered_tokens_path', None)
-        self.filter_words_path = self.config.get('filter_words_path', "data/filter_words_number.csv")
+        self.gcg_config = self.config.get('gcg_config', {})
+        # self.filtered_tokens_path = self.config.get('filtered_tokens_path', None)
+        # self.filter_words_path = self.config.get('filter_words_path', "data/filter_words_number.csv")
         self.test_n_times = self.config.get('test_n_times', 5)
 
 
@@ -54,7 +55,7 @@ class TRAPFingerprint(LLMFingerprintInterface):
         # only extract fingerprint if the model is pretrained or instruct model
         if model.model_name == model.pretrained_model or model.model_name == model.instruct_model:
             torch_model, tokenizer = model.load_model()
-            generated_prompts = generate_adversarial_suffix(self.prompts, self.targets, tokenizer, self.filtered_tokens_path, self.filter_words_path)
+            generated_prompts = generate_adversarial_suffix(torch_model, tokenizer, self.prompts, self.targets, self.gcg_config)
             fingerprint = generated_prompts
             return fingerprint
         else:

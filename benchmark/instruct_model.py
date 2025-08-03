@@ -1,7 +1,7 @@
 import torch
 from benchmark.model_interface import ModelInterface
 
-class BaseModel(ModelInterface):
+class InstructModel(ModelInterface):
     """
     Base model class that inherits from ModelInterface.
     This class can be used to implement common functionality for all models.
@@ -11,7 +11,7 @@ class BaseModel(ModelInterface):
     
     def generate(self, prompts, **kwargs):
         """
-        Generate text for given prompts.
+        Generate text for given prompts using apply_chat_template.
         
         Args:
             prompts (list): List of input prompt strings
@@ -32,9 +32,46 @@ class BaseModel(ModelInterface):
             'pad_token_id': tokenizer.pad_token_id,
         }
 
+        # Prepare messages for chat template
+        system_prompt = self.params.get('system_prompt', None)
+        
+        # Convert prompts to chat format
+        chat_messages_list = []
+        for prompt in prompts:
+            messages = []
+            if system_prompt is not None:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            chat_messages_list.append(messages)
+        
+        # Apply chat template and tokenize
+        tokenized_prompts = []
+        for messages in chat_messages_list:
+            # Apply chat template with exception handling
+            if hasattr(tokenizer, 'apply_chat_template') and tokenizer.chat_template is not None:
+                try:
+                    formatted_prompt = tokenizer.apply_chat_template(
+                        messages, 
+                        tokenize=False, 
+                        add_generation_prompt=True
+                    )
+                except Exception as e:
+                    # If chat template fails (e.g., doesn't support system role), fallback to manual formatting
+                    if system_prompt is not None:
+                        formatted_prompt = f"{system_prompt}\n\nUser: {messages[-1]['content']}\n\nAssistant:"
+                    else:
+                        formatted_prompt = f"User: {messages[-1]['content']}\n\nAssistant:"
+            else:
+                # Fallback for models without chat template
+                if system_prompt is not None:
+                    formatted_prompt = f"{system_prompt}\n\nUser: {messages[-1]['content']}\n\nAssistant:"
+                else:
+                    formatted_prompt = f"User: {messages[-1]['content']}\n\nAssistant:"
+            tokenized_prompts.append(formatted_prompt)
+        
         # Tokenize input prompts
         inputs = tokenizer(
-            prompts, 
+            tokenized_prompts, 
             return_tensors='pt', 
             padding=True, 
             truncation=True,
