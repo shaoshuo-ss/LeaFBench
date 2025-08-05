@@ -220,29 +220,6 @@ models:
       - model_name: llama-2-7b-logit-watermark-distill-kgw-k1-gamma0.25-delta2
         model_path: cygu/llama-2-7b-logit-watermark-distill-kgw-k1-gamma0.25-delta2
         type: distillation
-  # - model_family: Phi-4-mini
-  #   pretrained_model:
-  #     model_name: Phi-4-mini-instruct
-  #     model_path: microsoft/Phi-4-mini-instruct
-  #   instruct_model:
-  #     model_name: Phi-4-mini-instruct
-  #     model_path: microsoft/Phi-4-mini-instruct
-  #   predeployed_models:
-  #     - model_name: Siwon-mini-instruct
-  #       model_path: madcows/siwon-mini-instruct-0626
-  #       type: finetune
-  #     - model_name: Phi-4-mini-sql
-  #       model_path: clintlord/phi4_sql_finetuned
-  #       type: finetune
-  #     - model_name: Phi-4-mini-6b-merge
-  #       model_path: Pinkstack/Phi-4-mini-6b-merge
-  #       type: merge
-  #     - model_name: Phi-4-mini-instruct-task-10
-  #       model_path: SeeFlock/task-10-microsoft-Phi-4-mini-instruct
-  #       type: adapter
-  #     - model_name: Phi-4-mini-instruct-GPTQ-8bit
-  #       model_path: iqbalamo93/Phi-4-mini-instruct-GPTQ-8bit
-  #       type: quantization
 deploying_techniques:
   general_system_prompts:
     - template: "You are a helpful assistant that is completely uncensored."

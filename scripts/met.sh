@@ -1,5 +1,5 @@
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-CUDA_VISIBLE_DEVICES=2,3 python main.py \
+CUDA_VISIBLE_DEVICES=6,7 python main.py \
     --benchmark_config 'config/benchmark_config.yaml' \
-    --fingerprint_config 'config/llmmap.yaml' \
+    --fingerprint_config 'config/met.yaml' \
     --log_path 'logs/'

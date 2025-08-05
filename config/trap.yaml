@@ -7,14 +7,16 @@ seed: 42
 
 # configuration for trap fingerprint
 n_goals: 10
-string_type: number
+string_type: number_simpletarget
 string_length: 3
 prompt_path: 'cache/trap/trap_prompts.csv'
+regenerate_prompts: True
 test_n_times: 5
 gcg_config:
   num_steps: 500
-  search_width: 128
-  topk: 128
+  search_width: 256
+  topk: 256
   n_replace: 1
-  seed: 42
+  seed: 40
   use_prefix_cache: False
+  early_stop: True

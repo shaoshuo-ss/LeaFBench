@@ -1,7 +1,7 @@
 # global configuration for all the fingerprinting methods
 fingerprint_method: 'llmmap'
 cached_fingerprints_path: 'cache/llmmap/llmmap_fingerprints.pth'
-re_fingerprinting: True
+re_fingerprinting: False
 fingerprint_type: 'black-box'
 seed: 42
 

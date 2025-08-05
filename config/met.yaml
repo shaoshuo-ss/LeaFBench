@@ -1,0 +1,23 @@
+# Global configuration for all the fingerprinting methods
+fingerprint_method: 'met'
+cached_fingerprints_path: 'cache/met/met_fingerprints.pth'
+re_fingerprinting: False
+fingerprint_type: 'black-box'
+seed: 42
+
+# Configuration for MET fingerprint
+n_samples: 25
+text_length: 100
+response_length: 50
+n_runs: 1            # Number of runs for each model (e.g., 25 samples × 100 runs = 2500 total responses)
+samples_path: 'cache/met/met_samples.csv'
+regenerate_samples: false
+
+# Performance optimization settings
+batch_size: 25
+
+# MMD test settings
+gamma: 1.0              # Kernel parameter for Hamming kernel
+n_bootstrap: 1000       # Number of bootstrap samples for null distribution
+alpha: 0.05             # Significance level for hypothesis test
+random_seed: 42         # Random seed for reproducibility

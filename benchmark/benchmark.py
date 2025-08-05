@@ -475,7 +475,7 @@ class Benchmark:
         flattened_data = {}
         
         for group_name, group_data in metrics_dict.items():
-            for metric_type in ['pretrained_model', 'instruct_model', 'overall']:
+            for metric_type in ['pretrained', 'instruct', 'overall']:
                 if metric_type in group_data:
                     for metric_name, metric_value in group_data[metric_type].items():
                         column_name = f"{metric_type}_{metric_name}"
