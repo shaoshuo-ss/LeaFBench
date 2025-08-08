@@ -11,7 +11,7 @@ class InputParaphraseModel(ModelInterface):
     def __init__(self, config, model_pool=None, accelerator=None):
         super().__init__(config, model_pool=model_pool, accelerator=accelerator)
         # Configuration for the paraphrase model
-        self.paraphrase_model_name = self.params.get('paraphrase_model', 'Qwen/Qwen3-0.6B')
+        self.paraphrase_model_name = self.params.get('paraphrase_model', 'Qwen/Qwen2-0.5B-Instruct')
         self.paraphrase_model = None
         self.paraphrase_tokenizer = None
     
@@ -40,38 +40,108 @@ class InputParaphraseModel(ModelInterface):
         
         paraphrase_model = paraphrase_model.to(self.accelerator.device if self.accelerator else 'cpu')
         paraphrased_prompts = []
+        
         for prompt in prompts:
-            # Prepare input for T5 model (add task prefix)
-            input_text = f"Please paraphrase the following text while maintaining the meaning. Only answer the paraphrased text: '{prompt}'"
-            
-            # Tokenize
-            inputs = paraphrase_tokenizer.encode(
-                input_text, 
-                return_tensors='pt', 
-                max_length=512, 
-                truncation=True
-            )
-            
-            # Move to device
-            if self.accelerator is not None:
-                device = self.accelerator.device
-            else:
-                device = paraphrase_model.device
-            inputs = inputs.to(device)
-            
-            # Generate paraphrase
-            # with torch.no_grad():
-            outputs = paraphrase_model.generate(
-                inputs,
-                max_length=512,
-                num_beams=4,
-                temperature=0.7,
-                do_sample=True,
-                early_stopping=True
-            )
-            
-            # Decode the paraphrased text
-            paraphrased_text = paraphrase_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            try:
+                # Create a simple chat-based instruction for better results
+                if hasattr(paraphrase_tokenizer, 'apply_chat_template') and paraphrase_tokenizer.chat_template is not None:
+                    # Use chat template if available (for newer models like Qwen)
+                    messages = [
+                        {"role": "user", "content": f"Rewrite the following text using different words while keeping the same meaning. Only provide the rewritten text, nothing else:\n\n{prompt}"}
+                    ]
+                    input_text = paraphrase_tokenizer.apply_chat_template(
+                        messages, 
+                        tokenize=False, 
+                        add_generation_prompt=True
+                    )
+                else:
+                    # Fallback for models without chat template
+                    input_text = f"Rewrite: {prompt}\n\nRewritten version:"
+                
+                # Tokenize
+                inputs = paraphrase_tokenizer.encode(
+                    input_text, 
+                    return_tensors='pt', 
+                    max_length=512, 
+                    truncation=True
+                )
+                
+                # Move to device
+                if self.accelerator is not None:
+                    device = self.accelerator.device
+                else:
+                    device = paraphrase_model.device
+                inputs = inputs.to(device)
+                
+                # Generate paraphrase with more controlled parameters
+                with torch.no_grad():
+                    outputs = paraphrase_model.generate(
+                        inputs,
+                        max_new_tokens=min(len(prompt.split()) * 3, 200),  # Conservative token limit
+                        temperature=0.7,
+                        do_sample=True,
+                        top_p=0.8,
+                        top_k=40,
+                        pad_token_id=paraphrase_tokenizer.pad_token_id,
+                        eos_token_id=paraphrase_tokenizer.eos_token_id,
+                        repetition_penalty=1.15,
+                        length_penalty=1.0
+                    )
+                
+                # Decode only the generated part (excluding input)
+                input_length = inputs.shape[1]
+                generated_tokens = outputs[0][input_length:]
+                paraphrased_text = paraphrase_tokenizer.decode(generated_tokens, skip_special_tokens=True)
+                
+                # Clean the output
+                paraphrased_text = paraphrased_text.strip()
+                
+                # Remove instruction patterns and common prefixes
+                patterns_to_remove = [
+                    "Rewritten version:",
+                    "Rewritten text:",
+                    "Here is the rewritten text:",
+                    "The rewritten text is:",
+                    "Answer:",
+                    "Response:",
+                    "Sure, here's a rewritten version:",
+                    "Here's the rewritten version:",
+                    "The rewritten version is:",
+                ]
+                
+                for pattern in patterns_to_remove:
+                    if paraphrased_text.lower().startswith(pattern.lower()):
+                        paraphrased_text = paraphrased_text[len(pattern):].strip()
+                
+                # Remove quotes that wrap the entire text
+                while (paraphrased_text.startswith('"') and paraphrased_text.endswith('"')) or \
+                      (paraphrased_text.startswith("'") and paraphrased_text.endswith("'")):
+                    paraphrased_text = paraphrased_text[1:-1].strip()
+                
+                # Extract the first complete sentence/paragraph if the output is too long
+                if len(paraphrased_text) > len(prompt) * 2:
+                    # Try to find the first complete sentence
+                    sentences = paraphrased_text.split('.')
+                    if len(sentences) > 1 and len(sentences[0]) > 20:
+                        paraphrased_text = sentences[0] + '.'
+                    else:
+                        # If that doesn't work, truncate to reasonable length
+                        paraphrased_text = paraphrased_text[:len(prompt) * 2]
+                
+                # Final validation: check if the result is reasonable
+                if (not paraphrased_text or 
+                    len(paraphrased_text) < 10 or 
+                    paraphrased_text.lower() == prompt.lower() or
+                    len(paraphrased_text) > len(prompt) * 3):
+                    paraphrased_text = prompt
+                    # print(f"Warning: Paraphrasing failed for prompt, using original: {prompt[:50]}...")
+                # else:
+                    # print(f"Successfully paraphrased: '{prompt[:30]}...' -> '{paraphrased_text[:30]}...'")
+                    
+            except Exception as e:
+                print(f"Error during paraphrasing: {e}, using original prompt")
+                paraphrased_text = prompt
+                
             paraphrased_prompts.append(paraphrased_text)
         
         paraphrase_model = paraphrase_model.cpu()  # Move back to CPU after generation

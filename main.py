@@ -2,7 +2,7 @@ from benchmark import base_models
 from utils.utils import load_args, setup_environment, init_log, load_config
 import pandas as pd
 import os
-from benchmark.benchmark import Benchmark, save_fingerprints, load_fingerprints
+from benchmark.benchmark import Benchmark, save_fingerprints, load_fingerprints, reset_model_fingerprints
 from fingerprint.fingerprint_factory import create_fingerprint_method
 
 
@@ -50,8 +50,14 @@ if __name__ == "__main__":
     if not fingerprint_config.get("re_fingerprinting"):
         # if accelerator.is_main_process:
         load_fingerprints(cached_fingerprints_path, benchmark)
-        # Wait for main process to finish loading before continuing
-        # accelerator.wait_for_everyone()
+
+        # Reset fingerprints for models specified in regenerate_model_list
+        regenerate_model_list = benchmark_config.get("regenerate_model_list", [])
+        if regenerate_model_list:
+            logger.info(f"Found {len(regenerate_model_list)} models specified for fingerprint regeneration")
+            reset_model_fingerprints(benchmark, regenerate_model_list)
+        else:
+            logger.info("No models specified for fingerprint regeneration")
 
     logger.info(f"Fingerprint method {fingerprint_config.get('fingerprint_method')} initialized.")
     logger.info(f"Benchmark initialized with {len(benchmark.list_available_models())} models.")
@@ -96,50 +102,6 @@ if __name__ == "__main__":
         logger.warning("No cached fingerprints path specified, cannot save fingerprints to cache.")
     # compare fingerprints of different models using the integrated evaluation method
     if accelerator.is_main_process:
-        # logger.info("Comparing fingerprints of models...")
-        # results_comparing_pretrained_models = {}
-        # results_comparing_instruct_models = {}
-        # for model_name, model in all_models.items():
-
-        #     # get the pretrained model for comparison
-        #     pretrained_model = benchmark.get_model(model.pretrained_model)
-        #     if pretrained_model is None:
-        #         logger.warning(f"No pretrained model found for {model_name}, skipping comparison.")
-        #         continue
-        #     similarity = fingerprint_method.compare_fingerprints(base_model=pretrained_model, testing_model=model)
-        #     logger.info(f"Similarity between {model_name} and its pretrained model: {similarity:.4f}")
-        #     results_comparing_pretrained_models[model_name] = similarity
-            
-        #     # get the instruct model for comparison
-        #     instruct_model = benchmark.get_model(model.instruct_model)
-        #     if instruct_model is None:
-        #         logger.warning(f"No instruct model found for {model_name}, skipping comparison.")
-        #         continue
-        #     instruct_similarity = fingerprint_method.compare_fingerprints(base_model=instruct_model, testing_model=model)
-        #     logger.info(f"Similarity between {model_name} and its instruct model: {instruct_similarity:.4f}")
-        #     results_comparing_instruct_models[model_name] = instruct_similarity
-    
-        # # save the results of comparing fingerprints (only on main process)
-        # # Create a DataFrame with the comparison results
-        # comparison_data = []
-        # for model_name in results_comparing_pretrained_models.keys():
-        #     pretrained_similarity = results_comparing_pretrained_models.get(model_name, None)
-        #     instruct_similarity = results_comparing_instruct_models.get(model_name, None)
-        #     comparison_data.append({
-        #         'model_name': model_name,
-        #         'pretrained_similarity': pretrained_similarity,
-        #         'instruct_similarity': instruct_similarity
-        #     })
-        
-        # # Convert to DataFrame and save as CSV
-        # df = pd.DataFrame(comparison_data)
-        # output_csv_path = os.path.join(args.save_path, f"{fingerprint_config.get('fingerprint_method')}_results.csv")
-        # if output_csv_path:
-        #     os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
-        #     df.to_csv(output_csv_path, index=False)
-        #     logger.info(f"Comparison results saved to: {output_csv_path}")
-        # else:
-        #     logger.warning("No results_path specified in fingerprint config. Results not saved.")
         logger.info("Evaluating fingerprinting method...")
         evaluation_results = benchmark.evaluate_fingerprinting_method(
             fingerprint_method=fingerprint_method,

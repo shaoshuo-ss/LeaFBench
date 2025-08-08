@@ -1025,6 +1025,33 @@ class Benchmark:
         return self.models
 
 
+def reset_model_fingerprints(benchmark, regenerate_model_list):
+    """
+    Reset fingerprints for models specified in regenerate_model_list.
+    
+    Args:
+        benchmark: The benchmark instance
+        regenerate_model_list: List of model names whose fingerprints should be reset
+    """
+    logger = logging.getLogger(__name__)
+    if not regenerate_model_list:
+        logger.info("No models specified for fingerprint regeneration.")
+        return
+    
+    benchmark_models = benchmark.get_all_models()
+    reset_count = 0
+    
+    for model_name in regenerate_model_list:
+        if model_name in benchmark_models:
+            benchmark_models[model_name].set_fingerprint(None)
+            reset_count += 1
+            logger.info(f"Reset fingerprint for model: {model_name}")
+        else:
+            logger.warning(f"Model {model_name} not found in benchmark models, skipping reset.")
+    
+    logger.info(f"Successfully reset fingerprints for {reset_count} models specified in regenerate_model_list")
+
+
 def load_fingerprints(cached_fingerprints_path, benchmark):
     """
     Resume cached fingerprints if available.

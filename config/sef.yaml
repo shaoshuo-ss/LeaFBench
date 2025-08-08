@@ -1,0 +1,34 @@
+# global configuration for all the fingerprinting methods
+fingerprint_method: 'sef'
+cached_fingerprints_path: 'cache/sef/sef_fingerprints.pth'
+re_fingerprinting: False
+fingerprint_type: 'black-box'
+seed: 42
+
+# configuration for SEF (Sentence Embedding Fingerprint)
+# QA dataset sampling configuration
+qa_csv_path: 'cache/sef/sef_qa_samples.csv'
+n_samples: 200
+resample: False
+qa_datasets:
+  - 'hotpot_qa'
+  - 'ucinlp/drop'
+  - 'hendrycks/ethics'
+  - 'social_i_qa'
+  - 'qiaojin/pubmedqa'
+  - 'sciq'
+  - 'openai_humaneval'
+  - 'pkoerner/cam_stories'
+random_seed: 42
+continuation_word_limit: 20  # Number of words to extract for continuation tasks
+
+# Sentence embedding model configuration
+embedding_model_name: 'Qwen/Qwen3-Embedding-4B'
+
+# Fingerprint generation configuration
+fingerprint_aggregation: 'mean'  # Options: 'mean', 'original', 'max', 'sum'
+generation_batch_size: 8  # Batch size for model generation
+embedding_batch_size: 16  # Batch size for sentence embedding
+
+# Comparison configuration
+similarity_metric: 'cosine'  # Options: 'cosine', 'correlation', 'euclidean', 'manhattan', 'dot_product'

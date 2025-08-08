@@ -251,7 +251,7 @@ deploying_techniques:
       top_k: 10
       max_new_tokens: 512
   input_paraphrase:
-    - paraphrase_model: Qwen/Qwen3-0.6B
+    - paraphrase_model: Qwen/Qwen2-0.5B-Instruct
   output_perturbation:
     - noise_variance: 0.1
 training_data:
@@ -272,3 +272,11 @@ training_data:
     - Llama-3.1-8B-Instruct-8bit
   deploying_techniques:
     - system_prompts: [0, 1]
+# regenerate_model_list:
+#   - Qwen-2.5-7B-Instruct_input_paraphrase_0
+#   - Qwen2.5-14B-Instruct_input_paraphrase_0
+#   - Llama-3.1-8B-Instruct_input_paraphrase_0
+#   - Mistral-7B-v0.3-Instruct_input_paraphrase_0
+#   - Gemma-2-2b-Instruct_input_paraphrase_0
+#   - TinyLlama-1.1B-Chat-v1.0_input_paraphrase_0
+#   - Llama-2-7b-chat_input_paraphrase_0
