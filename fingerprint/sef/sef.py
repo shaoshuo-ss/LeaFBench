@@ -19,7 +19,7 @@ class SEFFingerprint(LLMFingerprintInterface):
         """
         self.helper = SEFPrepareHelper(self.config)
         self.qa_questions = self.helper.get_qa_samples()
-        self.embedding_model = self.helper.get_sentence_embedding_model()
+        self.embedding_model = self.helper.get_sentence_embedding_model().to(self.accelerator.device)
     
     def get_fingerprint(self, model):
         """

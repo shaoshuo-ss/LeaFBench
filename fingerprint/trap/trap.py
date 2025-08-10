@@ -5,6 +5,8 @@ import os
 import pandas as pd
 import re
 from fingerprint.trap.generate_prompts import generate_csv, generate_adversarial_suffix
+import numpy as np
+from collections import defaultdict
 
 
 
@@ -23,6 +25,7 @@ class TRAPFingerprint(LLMFingerprintInterface):
         # self.filtered_tokens_path = self.config.get('filtered_tokens_path', None)
         # self.filter_words_path = self.config.get('filter_words_path', "data/filter_words_number.csv")
         self.test_n_times = self.config.get('test_n_times', 5)
+        self.batch_size = self.config.get('batch_size', 16)
 
 
     def prepare(self, train_models=None):
@@ -62,16 +65,18 @@ class TRAPFingerprint(LLMFingerprintInterface):
 
     def compare_fingerprints(self, base_model, testing_model):
         """
-        Compare two models using their fingerprints.
+        Compare two models using their fingerprints with batch processing optimization.
 
         Args:
             base_model (ModelInterface): The base model to compare against.
             testing_model (ModelInterface): The model to compare.
+            batch_size (int): Number of prompts to process in each batch.
 
         Returns:
             float: Similarity score between the two fingerprints.
         """
         base_fingerprint = base_model.get_fingerprint()
+        batch_size = self.batch_size
         
         if not base_fingerprint or len(base_fingerprint) == 0:
             return 0.0
@@ -79,67 +84,49 @@ class TRAPFingerprint(LLMFingerprintInterface):
         total_matches = 0
         total_tests = 0
         
-        # Process prompts sequentially
+        # Create all test cases upfront for batch processing
+        all_prompts = []
+        all_targets = []
+        all_prompt_indices = []
+        
         for k, prompt in enumerate(base_fingerprint):
             target_string = self.string_target[k]
-            print(f"Testing prompt {k+1}/{len(base_fingerprint)} with target '{target_string}'")
-            # Test each prompt multiple times
+            # Repeat each prompt test_n_times
             for _ in range(self.test_n_times):
-                try:
-                    answer = testing_model.generate([prompt])
-                    generated_text = answer[0] if isinstance(answer, list) else answer
-                    print(f"Generated text: {generated_text}")
+                all_prompts.append(prompt)
+                all_targets.append(target_string)
+                all_prompt_indices.append(k)
+        
+        print(f"Processing {len(all_prompts)} total tests in batches of {batch_size}")
+        
+        # Process in batches
+        for i in tqdm(range(0, len(all_prompts), batch_size), desc="Processing batches"):
+            batch_prompts = all_prompts[i:i+batch_size]
+            batch_targets = all_targets[i:i+batch_size]
+            batch_indices = all_prompt_indices[i:i+batch_size]
+            
+            try:
+                # Generate responses for the entire batch
+                batch_answers = testing_model.generate(batch_prompts)
+                
+                # Process batch results
+                for j, (generated_text, target_string, prompt_idx) in enumerate(zip(batch_answers, batch_targets, batch_indices)):
+                    if isinstance(generated_text, list):
+                        generated_text = generated_text[0] if generated_text else ""
+                    
                     if str(target_string) in generated_text:
                         total_matches += 1
                     
                     total_tests += 1
-                except Exception as e:
-                    print(f"Error testing prompt: {e}")
-                    total_tests += 1  # Still count the test even if it failed
+                    
+            except Exception as e:
+                print(f"Error processing batch {i//batch_size + 1}: {e}")
+                # Count failed tests
+                total_tests += len(batch_prompts)
         
         # Calculate overall similarity score as the proportion of successful tests
         similarity_score = total_matches / total_tests if total_tests > 0 else 0.0
+        print(f"Overall similarity score: {similarity_score:.4f} ({total_matches}/{total_tests})")
         
         return similarity_score
     
-    def compare_fingerprints_original(self, base_model, testing_model):
-        """
-        Original implementation of compare_fingerprints for comparison.
-        This method is kept for reference and fallback purposes.
-
-        Args:
-            base_model (ModelInterface): The base model to compare against.
-            testing_model (ModelInterface): The model to compare.
-
-        Returns:
-            float: Similarity score between the two fingerprints.
-        """
-        base_fingerprint = base_model.get_fingerprint()
-        total_matches = 0
-        total_tests = 0
-        
-        for k, prompt in enumerate(base_fingerprint):
-            target_string = self.string_target[k]
-            matches_for_this_prompt = 0
-            
-            for _ in range(self.test_n_times):
-                answer = testing_model.generate([prompt])
-                # testing_model.generate returns a list, so we take the first element
-                generated_text = answer[0] if isinstance(answer, list) else answer
-                print(f"Generated text: {generated_text}")
-                # Check if the target string is in the generated text
-                if str(target_string) in generated_text:
-                    matches_for_this_prompt += 1
-                    total_matches += 1
-                
-                total_tests += 1
-            
-            # Calculate success rate for this prompt
-            # success_rate = matches_for_this_prompt / self.test_n_times
-            # print(f"Prompt {k+1}: Target '{target_string}' found in {matches_for_this_prompt}/{self.test_n_times} tests (success rate: {success_rate:.2%})")
-        
-        # Calculate overall similarity score as the proportion of successful tests
-        similarity_score = total_matches / total_tests if total_tests > 0 else 0.0
-        # print(f"Overall similarity score: {similarity_score:.4f} ({total_matches}/{total_tests})")
-        
-        return similarity_score

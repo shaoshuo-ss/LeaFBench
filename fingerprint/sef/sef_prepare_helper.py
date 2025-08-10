@@ -4,6 +4,8 @@ import pandas as pd
 from datasets import load_dataset
 from sentence_transformers import SentenceTransformer
 
+DATASET_ROOT = '~/.cache/huggingface/hub/'
+
 class SEFPrepareHelper:
     def __init__(self, config):
         self.config = config
@@ -34,6 +36,7 @@ class SEFPrepareHelper:
         
         # Shuffle all questions
         random.shuffle(all_questions)
+        os.makedirs(os.path.dirname(self.qa_csv_path), exist_ok=True)
         pd.DataFrame({'question': all_questions}).to_csv(self.qa_csv_path, index=False)
         return all_questions
     
@@ -43,40 +46,40 @@ class SEFPrepareHelper:
         
         try:
             if dataset_name == 'truthful_qa':
-                ds = load_dataset('truthful_qa', 'generation', split='validation')
+                ds = load_dataset('truthful_qa', 'generation', split='validation', streaming=True, trust_remote_code=True)
                 questions = [x['question'] for x in ds]
                 
             elif dataset_name == 'squad':
-                ds = load_dataset('squad', split='validation')
+                ds = load_dataset('squad', split='validation', streaming=True, trust_remote_code=True)
                 questions = [x['question'] for x in ds]
                 
-            elif dataset_name == 'hotpot_qa':
-                ds = load_dataset('hotpot_qa', 'distractor', split='validation')
+            elif dataset_name == 'metaeval/reclor':
+                ds = load_dataset('metaeval/reclor', split='validation', streaming=True, trust_remote_code=True)
                 questions = [x['question'] for x in ds]
-                
+
             elif dataset_name == 'ucinlp/drop':
-                ds = load_dataset('ucinlp/drop', split='validation')
+                ds = load_dataset('ucinlp/drop', split='validation', streaming=True, trust_remote_code=True)
                 questions = [x['question'] for x in ds]
                 
             elif dataset_name == 'hendrycks/ethics':
                 # Ethics dataset has multiple subsets, use 'commonsense' as default
-                ds = load_dataset('hendrycks/ethics', 'commonsense', split='test')
+                ds = load_dataset('hendrycks/ethics', 'commonsense', split='test', streaming=True, trust_remote_code=True)
                 questions = [f"Is this statement ethical: {x['input']}" for x in ds]
                 
-            elif dataset_name == 'social_i_qa':
-                ds = load_dataset('social_i_qa', split='validation')
+            elif dataset_name == 'allenai/social_i_qa':
+                ds = load_dataset('allenai/social_i_qa', split='validation', streaming=True, trust_remote_code=True)
                 questions = [x['question'] for x in ds]
                 
-            elif dataset_name == 'qiaojin/pubmedqa':
-                ds = load_dataset('qiaojin/pubmedqa', 'pqa_labeled', split='test')
+            elif dataset_name == 'qiaojin/PubMedQA':
+                ds = load_dataset('qiaojin/PubMedQA', 'pqa_labeled', split='train', streaming=True, trust_remote_code=True)
                 questions = [x['question'] for x in ds]
                 
             elif dataset_name == 'sciq':
-                ds = load_dataset('sciq', split='validation')
+                ds = load_dataset('sciq', split='validation', streaming=True, trust_remote_code=True)
                 questions = [x['question'] for x in ds]
                 
             elif dataset_name == 'openai_humaneval':
-                ds = load_dataset('openai_humaneval', split='test')
+                ds = load_dataset('openai_humaneval', split='test', streaming=True, trust_remote_code=True)
                 questions = []
                 for x in ds:
                     # Extract first n words from the docstring/prompt
@@ -87,7 +90,7 @@ class SEFPrepareHelper:
                     questions.append(question)
                     
             elif dataset_name == 'pkoerner/cam_stories':
-                ds = load_dataset('pkoerner/cam_stories', split='train')
+                ds = load_dataset('pkoerner/cam_stories', split='val', streaming=True, trust_remote_code=True)
                 questions = []
                 for x in ds:
                     # Extract first n words from the story

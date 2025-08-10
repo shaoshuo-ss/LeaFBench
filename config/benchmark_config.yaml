@@ -234,10 +234,10 @@ deploying_techniques:
     - dataset_name: squad_v2
       retriever_model_name: all-mpnet-base-v2
       num_of_retrieved_docs: 1
-  watermark:
-    - gamma: 0.25
-      delta: 2.0
-      seed_scheme: selfhash
+  # watermark:
+  #   - gamma: 0.25
+  #     delta: 2.0
+  #     seed_scheme: selfhash
   sampling_settings:
     - do_sample: False
     - do_sample: True

@@ -9,16 +9,16 @@ seed: 42
 # QA dataset sampling configuration
 qa_csv_path: 'cache/sef/sef_qa_samples.csv'
 n_samples: 200
-resample: False
+resample: True
 qa_datasets:
-  - 'hotpot_qa'
+  # - 'metaeval/reclor'
   - 'ucinlp/drop'
   - 'hendrycks/ethics'
-  - 'social_i_qa'
-  - 'qiaojin/pubmedqa'
-  - 'sciq'
+  # - 'allenai/social_i_qa'
+  - 'qiaojin/PubMedQA'
+  # - 'sciq'
   - 'openai_humaneval'
-  - 'pkoerner/cam_stories'
+  # - 'pkoerner/cam_stories'
 random_seed: 42
 continuation_word_limit: 20  # Number of words to extract for continuation tasks
 
@@ -27,8 +27,8 @@ embedding_model_name: 'Qwen/Qwen3-Embedding-4B'
 
 # Fingerprint generation configuration
 fingerprint_aggregation: 'mean'  # Options: 'mean', 'original', 'max', 'sum'
-generation_batch_size: 8  # Batch size for model generation
-embedding_batch_size: 16  # Batch size for sentence embedding
+generation_batch_size: 20  # Batch size for model generation
+embedding_batch_size: 20  # Batch size for sentence embedding
 
 # Comparison configuration
 similarity_metric: 'cosine'  # Options: 'cosine', 'correlation', 'euclidean', 'manhattan', 'dot_product'
