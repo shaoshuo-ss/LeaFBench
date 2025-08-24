@@ -23,7 +23,7 @@ inference_model:
   with_add_dense_class: False
   emb_size: 1024
   num_queries: 8
-  inference_model_path: 'models/llmmap/model.pth'
+  inference_model_path: 'data/llmmap/model.pth'
   train_config:
     epochs: 10
     batch_size: 32
