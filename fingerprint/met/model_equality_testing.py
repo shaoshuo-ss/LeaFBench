@@ -97,12 +97,9 @@ class METFingerprint(LLMFingerprintInterface):
                     batch_fingerprint.append(truncated_response)
                     
                 except Exception as e:
-                    print(f"Error processing response {batch_start + i + 1}: {e}")
                     batch_fingerprint.append("")
                     
         except Exception as e:
-            print(f"Batch generation failed for batch starting at {batch_start}: {e}")
-            print("Falling back to individual prompt processing for this batch...")
             
             # Fallback to individual processing for this batch
             for i, prompt in enumerate(batch_prompts):
@@ -118,7 +115,6 @@ class METFingerprint(LLMFingerprintInterface):
                     batch_fingerprint.append(truncated_response)
                     
                 except Exception as e:
-                    print(f"Error generating individual response {batch_start + i + 1}: {e}")
                     batch_fingerprint.append("")
         
         return batch_fingerprint

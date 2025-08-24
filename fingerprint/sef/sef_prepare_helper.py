@@ -101,7 +101,7 @@ class SEFPrepareHelper:
                     questions.append(question)
                     
             else:
-                print(f"Warning: Unknown dataset {dataset_name}, skipping...")
+                # ...existing code...
                 return []
                 
             # Remove duplicates and sample
@@ -109,13 +109,11 @@ class SEFPrepareHelper:
             if len(questions) >= num_samples:
                 sampled_questions = random.sample(questions, num_samples)
             else:
-                print(f"Warning: Dataset {dataset_name} has only {len(questions)} samples, less than requested {num_samples}")
                 sampled_questions = questions
                 
             return sampled_questions
             
         except Exception as e:
-            print(f"Error loading dataset {dataset_name}: {e}")
             return []
 
     def get_sentence_embedding_model(self):

@@ -134,9 +134,7 @@ def detect_model_architecture(state_dict, name):
             return 'llama', 'model.layers.{}', total_layers
         else:
             # Ultimate fallback - try to detect from available keys
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not auto-detect architecture for {name}")
-            logger.warning(f"Sample keys: {sample_keys[:5]}")
+            # ...existing code...
             return 'llama', 'model.layers.{}', total_layers  # Default fallback
 
 def extract_llama_style_weights(state_dict, layer_pattern, target_layers, x, WqWk_list, WvWo_list, WuWd_list):

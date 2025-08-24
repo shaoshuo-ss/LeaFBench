@@ -603,11 +603,6 @@ class WatermarkDetector(WatermarkBase):
 # Ngram iteration from nltk, extracted to remove the dependency
 # Natural Language Toolkit: Utility functions
 #
-# Copyright (C) 2001-2023 NLTK Project
-# Author: Steven Bird <stevenbird1@gmail.com>
-#         Eric Kafe <kafe.eric@gmail.com> (acyclic closures)
-# URL: <https://www.nltk.org/>
-# For license information, see https://github.com/nltk/nltk/blob/develop/LICENSE.txt
 ##########################################################################
 
 

@@ -1,8 +1,3 @@
-"""Updated version of core.py from
-https://github.com/yamatt/homoglyphs/tree/main/homoglyphs_fork
-for modern python3
-"""
-
 from collections import defaultdict
 import json
 from itertools import product

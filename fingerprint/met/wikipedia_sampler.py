@@ -146,20 +146,18 @@ def sample_wikipedia_texts(n_samples=25, text_length=100, cache_path=None, regen
             if processed_count % 10 == 0:
                 print(f"Generated {len(samples)} valid samples from {processed_count} attempts")
         
-        print(f"Successfully generated {len(samples)} samples")
+            # ...existing code...
         
         # Save to cache if path provided
         if cache_path and samples:
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
             df = pd.DataFrame(samples)
             df.to_csv(cache_path, index=False)
-            print(f"Samples saved to {cache_path}")
+            # ...existing code...
         
         return samples
         
     except Exception as e:
-        print(f"Error loading Wikipedia dataset: {e}")
-        print("Falling back to dummy data generation...")
         return generate_dummy_samples(n_samples, text_length, cache_path)
 
 
@@ -175,7 +173,7 @@ def generate_dummy_samples(n_samples=25, text_length=100, cache_path=None):
     Returns:
         list: List of dictionaries containing 'text_sample' and 'prompt'
     """
-    print("Generating dummy samples for testing...")
+    # ...existing code...
     
     dummy_texts = [
         "The quick brown fox jumps over the lazy dog. This pangram contains every letter of the alphabet exactly once, making it useful for testing purposes.",

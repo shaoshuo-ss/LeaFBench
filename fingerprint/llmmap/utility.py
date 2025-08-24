@@ -43,11 +43,6 @@ def pytorch_gpu_optimization():
             torch.cuda.empty_cache()
             # Get number of available GPUs
             num_gpus = torch.cuda.device_count()
-            print(f"Available GPUs: {num_gpus}")
-            for i in range(num_gpus):
-                gpu_name = torch.cuda.get_device_name(i)
-                print(f"GPU {i}: {gpu_name}")
-        except RuntimeError as e:
-            print(e)
-    else:
-        print("CUDA is not available")
+            # ...existing code...
+        except RuntimeError:
+            pass
