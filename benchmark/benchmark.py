@@ -6,7 +6,6 @@ from benchmark.model_pool import ModelPool
 from benchmark.base_models import BaseModel
 from benchmark.instruct_model import InstructModel
 from benchmark.rag_models import RAGModel
-from benchmark.watermark_models import WatermarkModel
 from benchmark.adversarial_models import InputParaphraseModel, OutputPerturbationModel
 import logging
 import pandas as pd
@@ -80,12 +79,6 @@ class Benchmark:
                         rag_configs = deploying_techniques["rag"]
                         self._load_rag_model(
                             rag_configs, model_family_name, pretrained_model_name, 
-                            instruct_model_name, default_generation_params)
-                    if deploying_techniques.get("watermark", None) is not None:
-                        # If watermarking is specified, create a Watermark model instance
-                        watermark_configs = deploying_techniques["watermark"]
-                        self._load_watermark_model(
-                            watermark_configs, model_family_name, pretrained_model_name, 
                             instruct_model_name, default_generation_params)
                     if deploying_techniques.get("sampling_settings", None) is not None:
                         # If sampling settings are specified, create models with different sampling configurations
@@ -224,21 +217,6 @@ class Benchmark:
             rag_config["params"] = default_generation_params
             rag_config["type"] = "rag"
             self.models[rag_config["model_name"]] = RAGModel(rag_config, model_pool=self.modelpool, accelerator=self.accelerator)
-
-    def _load_watermark_model(self, watermark_configs=None, model_family_name=None, pretrained_model_name=None,
-                              instruct_model_name=None, default_generation_params=None):
-        """
-        Load a watermark model with the specified configuration.
-        """
-        for i, watermark_config in enumerate(watermark_configs):
-            watermark_config["model_family"] = model_family_name
-            watermark_config["pretrained_model"] = pretrained_model_name
-            watermark_config["instruct_model"] = instruct_model_name
-            watermark_config["base_model"] = instruct_model_name
-            watermark_config["model_name"] = instruct_model_name + "_watermark_" + str(i)
-            watermark_config["params"] = default_generation_params
-            watermark_config["type"] = "watermark"
-            self.models[watermark_config["model_name"]] = WatermarkModel(watermark_config, model_pool=self.modelpool, accelerator=self.accelerator)
 
     def _load_cot_model(self, cot_configs=None, model_family_name=None, pretrained_model_name=None,
                         instruct_model_name=None, instruct_model_path=None, default_generation_params=None):
