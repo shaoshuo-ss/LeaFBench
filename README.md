@@ -1,6 +1,6 @@
 # LeaFBench
 
-LeaFBench is a comprehensive benchmark designed to evaluate and compare various fingerprinting methods for large language models (LLMs). The project provides a unified interface for running, testing, and analyzing different models and algorithms, facilitating reproducible research and fair comparison.
+This is the official code for our paper entitled "SoK: Large Language Model Copyright Auditing via Fingerprinting". LeaFBench is a comprehensive benchmark designed to evaluate and compare various fingerprinting methods for large language models (LLMs). The project provides a unified interface for running, testing, and analyzing different models and algorithms, facilitating reproducible research and fair comparison.
 
 ## Project Structure
 
@@ -30,3 +30,14 @@ pip install -r requirements.txt
   The results will be generated according to the configuration specified in the related config file.
 
 For further details, please refer to the comments in the scripts and configuration files.
+
+## Further Extensions
+
+LeaFBench is designed to be easily extensible. You can add new models or fingerprinting methods by following the structure in the `benchmark/` and `fingerprint/` directories. Please refer to the [README for Benchmark](benchmark/README.md) and [README for Fingerprinting Methods](fingerprint/README.md) for guidance.
+
+## Citation
+If you find this work useful in your research, please consider citing our paper:
+
+```bibtex
+
+```
