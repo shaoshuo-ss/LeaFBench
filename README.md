@@ -35,6 +35,10 @@ For further details, please refer to the comments in the scripts and configurati
 
 LeaFBench is designed to be easily extensible. You can add new models or fingerprinting methods by following the structure in the `benchmark/` and `fingerprint/` directories. Please refer to the [README for Benchmark](benchmark/README.md) and [README for Fingerprinting Methods](fingerprint/README.md) for guidance.
 
+## Collections of Papers
+
+We also provide a collection of papers about LLM fingerprinting in [Awesome-LLM-Fingerprinting](https://github.com/shaoshuo-ss/Awesome-LLM-Fingerprinting).
+
 ## Citation
 If you find this work useful in your research, please consider citing our paper:
 
