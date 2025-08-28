@@ -1,6 +1,6 @@
 # LeaFBench
 
-This is the official code for our paper entitled "SoK: Large Language Model Copyright Auditing via Fingerprinting". LeaFBench is a comprehensive benchmark designed to evaluate and compare various fingerprinting methods for large language models (LLMs). The project provides a unified interface for running, testing, and analyzing different models and algorithms, facilitating reproducible research and fair comparison.
+This is the official code for our paper entitled "[SoK: Large Language Model Copyright Auditing via Fingerprinting](http://arxiv.org/abs/2508.19843)". LeaFBench is a comprehensive benchmark designed to evaluate and compare various fingerprinting methods for large language models (LLMs). The project provides a unified interface for running, testing, and analyzing different models and algorithms, facilitating reproducible research and fair comparison.
 
 ## Project Structure
 
@@ -39,5 +39,10 @@ LeaFBench is designed to be easily extensible. You can add new models or fingerp
 If you find this work useful in your research, please consider citing our paper:
 
 ```bibtex
-
+@article{shao2025sok,
+    title={SoK: Large Language Model Copyright Auditing via Fingerprinting},
+    author={Shao, Shuo and Li, Yiming and He, Yu and Yao, Hongwei and Yang, Wenyuan and Tao, Dacheng and Qin, Zhan},
+    journal={arXiv preprint arXiv:2508.19843},
+    year={2025}
+}
 ```
