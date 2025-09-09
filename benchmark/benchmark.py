@@ -364,10 +364,10 @@ class Benchmark:
                 # For pretrained models: positive if test model's pretrained_model matches base
                 # For instruct models: positive if test model's instruct_model matches base
                 is_positive = False
-                if base_model.type == 'pretrained' and test_model.pretrained_model == base_name:
+                if test_model.pretrained_model == base_model.pretrained_model:
                     is_positive = True
-                elif base_model.type == 'instruct' and test_model.instruct_model == base_name:
-                    is_positive = True
+                else:
+                    is_positive = False
                 
                 labels_matrix[base_name][test_name] = 1 if is_positive else 0
                 
