@@ -7,6 +7,7 @@ from fingerprint.gradient.gradient import GradientFingerprint
 from fingerprint.trap.trap import TRAPFingerprint
 from fingerprint.met.model_equality_testing import METFingerprint
 from fingerprint.sef.sef import SEFFingerprint
+from fingerprint.mdir.mdir import MDIRFingerprint
 
 
 def create_fingerprint_method(config=None, accelerator=None) -> LLMFingerprintInterface:
@@ -27,5 +28,7 @@ def create_fingerprint_method(config=None, accelerator=None) -> LLMFingerprintIn
         return METFingerprint(config=config, accelerator=accelerator)
     elif method_name == "sef":
         return SEFFingerprint(config=config, accelerator=accelerator)
+    elif method_name == "mdir":
+        return MDIRFingerprint(config=config, accelerator=accelerator)
     else:
         raise ValueError(f"Unknown fingerprinting method: {method_name}")

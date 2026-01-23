@@ -73,7 +73,7 @@ def init_log(args):
     args.save_path = os.path.join(
         args.log_path, 
         args.fingerprint_method,
-        datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     )
     os.makedirs(args.save_path, exist_ok=True)
     print(f"Log path initialized: {args.save_path}")
